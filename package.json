@@ -1,0 +1,17 @@
+{
+  "name": "staysathi",
+  "version": "1.0.0",
+  "description": "StaySathi — bubble-based property manager for hostel, PG, flat and apartment owners",
+  "scripts": {
+    "setup": "npm install --prefix server && npm install --prefix client",
+    "build": "npm run build --prefix client",
+    "start": "node server/server.js",
+    "dev:server": "node server/server.js",
+    "dev:client": "npm run dev --prefix client"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mallojusampathkumar/newhostelapp"
+  },
+  "license": "MIT"
+}
