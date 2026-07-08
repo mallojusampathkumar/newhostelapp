@@ -3,6 +3,7 @@ import { get, post, del } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import TenantSheet from '../components/TenantSheet.jsx';
+import { downloadCsv } from '../util.js';
 import { useToast } from '../App.jsx';
 
 const ROLES = [['cook', '🍲'], ['watchman', '💂'], ['cleaner', '🧹'], ['warden', '🧑‍🏫'], ['manager', '🧑‍💼'], ['helper', '🤝']];
@@ -15,6 +16,7 @@ export default function People({ overview, refreshOverview }) {
   const [propId, setPropId] = useState('');
   const [tenants, setTenants] = useState(null);
   const [staff, setStaff] = useState(null);
+  const [kycRecords, setKycRecords] = useState(null);
   const [modal, setModal] = useState(null);
   const [sheetTenant, setSheetTenant] = useState(null);
 
@@ -24,8 +26,20 @@ export default function People({ overview, refreshOverview }) {
   const load = useCallback(() => {
     get(`/tenants${q}`).then(d => setTenants(d.tenants)).catch(() => {});
     get(`/staff${q}`).then(d => setStaff(d.staff)).catch(() => {});
+    get('/kyc-records').then(d => setKycRecords(d.records)).catch(() => {});
   }, [q]);
   useEffect(() => { load(); }, [load]);
+
+  const exportKyc = () => downloadCsv('staysathi-kyc.csv', [
+    ['Tenant', 'Phone', 'Property', 'Room', 'KYC Status', 'Documents'],
+    ...(kycRecords || []).map(r => [r.name, r.phone, r.propertyName, r.roomName, r.kycStatus,
+      r.docs.map(d => `${d.docType}${d.idNumber ? ':' + d.idNumber : ''}`).join(' | ')])
+  ]);
+
+  const kycChip = (s) => s === 'verified' ? ['green', `✅ ${t('kycVerified')}`]
+    : s === 'submitted' ? ['blue', `🔵 ${t('kycSubmitted')}`]
+    : s === 'rejected' ? ['red', `❌ ${t('kycRejected')}`]
+    : ['orange', `🟠 ${t('kycPending')}`];
 
   const filtered = (tenants || [])
     .filter(x => x.status === status)
@@ -44,8 +58,38 @@ export default function People({ overview, refreshOverview }) {
 
       <div className="seg mt8">
         <button className={seg === 'tenants' ? 'active' : ''} onClick={() => setSeg('tenants')}>🧑 {t('tenants')}</button>
+        <button className={seg === 'kyc' ? 'active' : ''} onClick={() => setSeg('kyc')}>🪪 {t('kyc')}</button>
         <button className={seg === 'staff' ? 'active' : ''} onClick={() => setSeg('staff')}>🧹 {t('staffTitle')}</button>
       </div>
+
+      {seg === 'kyc' && (
+        <>
+          <div className="row spread mt16">
+            <span className="chip">🪪 {(kycRecords || []).filter(r => r.kycStatus === 'verified').length}/{(kycRecords || []).length} {t('kycVerified')}</span>
+            <button className="btn btn-sm" onClick={exportKyc}>⬇️ {t('kycExport')}</button>
+          </div>
+          <div className="mt16">
+            {kycRecords && kycRecords.length === 0 && <Empty icon="🪪" text="—" />}
+            {(kycRecords || [])
+              .filter(r => !propId || (tenants || []).some(x => x.id === r.id && x.propertyId === propId))
+              .sort((a, b) => (a.kycStatus === 'submitted' ? -1 : 0) - (b.kycStatus === 'submitted' ? -1 : 0))
+              .map(r => {
+                const [cls, label] = kycChip(r.kycStatus);
+                const tenant = (tenants || []).find(x => x.id === r.id);
+                return (
+                  <div key={r.id} className="list-item tap" onClick={() => tenant && setSheetTenant(tenant)}>
+                    <div className="avatar" style={{ background: 'linear-gradient(135deg,#6c5ce7,#8e7bff)' }}>🪪</div>
+                    <div className="grow">
+                      <b>{r.name}</b>
+                      <div className="muted small">{r.propertyName} · {t('room')} {r.roomName} · 📄 {r.docs.length}/3</div>
+                    </div>
+                    <span className={`chip ${cls}`}>{label}</span>
+                  </div>
+                );
+              })}
+          </div>
+        </>
+      )}
 
       {seg === 'tenants' && (
         <>
@@ -69,9 +113,7 @@ export default function People({ overview, refreshOverview }) {
                         ? <span className="chip red">⚠️ {rupee(x.dues.dueAmount)}</span>
                         : <span className="chip green">✅ {t('paid')}</span>
                     )}
-                    <span className={`chip ${x.kycStatus === 'verified' || x.kycStatus === 'submitted' ? 'green' : 'orange'}`}>
-                      🪪 {x.kycStatus === 'pending' ? t('kycPending') : t('kycDone')}
-                    </span>
+                    <span className={`chip ${kycChip(x.kycStatus)[0]}`}>🪪 {kycChip(x.kycStatus)[1].replace(/^\S+ /, '')}</span>
                   </div>
                 </div>
                 <a className="btn btn-sm" href={`tel:${x.phone}`} onClick={e => e.stopPropagation()}>📞</a>

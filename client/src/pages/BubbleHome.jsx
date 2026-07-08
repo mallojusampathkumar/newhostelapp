@@ -3,6 +3,8 @@ import { get, post, put } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, rupee } from '../components/ui.jsx';
 import TenantSheet from '../components/TenantSheet.jsx';
+import SetupWizard from '../components/SetupWizard.jsx';
+import SmartImport from '../components/SmartImport.jsx';
 import { useToast } from '../App.jsx';
 
 /* The bubble navigator:
@@ -104,6 +106,11 @@ export default function BubbleHome({ overview, refreshOverview, go }) {
                 <span className="sub">{t('tapYourBubble')} 👆</span>
               </div>
             </div>
+            {totals && totals.properties === 0 && (
+              <div className="row wrap mt16" style={{ justifyContent: 'center' }}>
+                <button className="btn btn-primary" onClick={() => setModal({ kind: 'wizard' })}>🪄 {t('setupWizard')}</button>
+              </div>
+            )}
             {totals && (
               <div className="stat-strip">
                 <div className="stat-tile tap" onClick={() => setLevel('props')}><div className="v">🏠 {totals.properties}</div><div className="k">{t('properties')}</div></div>
@@ -130,10 +137,20 @@ export default function BubbleHome({ overview, refreshOverview, go }) {
                 </div>
               );
             })}
+            <div className="bubble add-bubble" onClick={() => setModal({ kind: 'wizard' })}>
+              <span className="ico">🪄</span>
+              <span className="name">{t('setupWizard')}</span>
+            </div>
             <div className="bubble add-bubble" onClick={() => setModal({ kind: 'addProperty' })}>
               <span className="ico">➕</span>
               <span className="name">{t('addProperty')}</span>
             </div>
+            {properties.length > 0 && (
+              <div className="bubble add-bubble" onClick={() => setModal({ kind: 'import' })}>
+                <span className="ico">📥</span>
+                <span className="name">{t('smartImport')}</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -208,6 +225,13 @@ export default function BubbleHome({ overview, refreshOverview, go }) {
 
       {/* ---------- modals ---------- */}
       {pinFor && <PinModal prop={pinFor} onOk={onPinOk} onClose={() => setPinFor(null)} />}
+      {modal?.kind === 'wizard' && (
+        <SetupWizard onDone={async () => { setModal(null); refreshOverview(); setLevel('props'); }} onClose={() => setModal(null)} />
+      )}
+      {modal?.kind === 'import' && (
+        <SmartImport properties={properties} defaultProp={tree?.property?.id}
+          onDone={async () => { setModal(null); await refreshAll(); }} onClose={() => setModal(null)} />
+      )}
       {modal?.kind === 'addProperty' && <AddPropertyModal onDone={async () => { setModal(null); refreshOverview(); }} onClose={() => setModal(null)} />}
       {modal?.kind === 'addFloor' && tree && (
         <AddFloorModal propId={tree.property.id} count={tree.floors.length} onDone={async () => { setModal(null); await refreshAll(); }} onClose={() => setModal(null)} />
@@ -388,7 +412,7 @@ function AddTenantModal({ bed, room, onDone, onClose }) {
   const { t } = useLang();
   const toast = useToast();
   const [f, setF] = useState({
-    name: '', phone: '', rent: room?.rent || '', deposit: '',
+    name: '', phone: '', rent: room?.rent || '', deposit: '', maintenance: '', openingDue: '',
     joinDate: new Date().toISOString().slice(0, 10), occupation: '', aadhaar: ''
   });
   const [busy, setBusy] = useState(false);
@@ -420,6 +444,14 @@ function AddTenantModal({ bed, room, onDone, onClose }) {
           </Field>
           <Field label={`💼 ${t('occupation')}`}>
             <input className="input" value={f.occupation} onChange={e => setF({ ...f, occupation: e.target.value })} placeholder="Student" />
+          </Field>
+        </div>
+        <div className="row">
+          <Field label={`🔧 ${t('maintenanceLabel')}`}>
+            <input className="input" type="number" min="0" value={f.maintenance} onChange={e => setF({ ...f, maintenance: e.target.value })} />
+          </Field>
+          <Field label={`⚠️ ${t('oldBalance')} (₹)`}>
+            <input className="input" type="number" min="0" value={f.openingDue} onChange={e => setF({ ...f, openingDue: e.target.value })} />
           </Field>
         </div>
         <Field label={`🪪 ${t('aadhaarNo')}`}>

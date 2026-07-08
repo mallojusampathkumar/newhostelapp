@@ -50,7 +50,9 @@ function readToken(token) {
     return userId;
   } catch { return null; }
 }
-function auth(req, res, next) {
+// login check only — used by /api/me and admin routes so a blocked owner can
+// still see WHY they are blocked
+function authAny(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
   const userId = readToken(token);
   const user = userId && db.users.find(u => u.id === userId);
@@ -58,9 +60,47 @@ function auth(req, res, next) {
   req.user = user;
   next();
 }
+
+function isReadonly(u) {
+  if (u.role === 'admin') return false;
+  if (u.plan === 'premium') return u.planExpiresAt ? new Date(u.planExpiresAt) < new Date() : false;
+  return u.trialEndsAt ? new Date(u.trialEndsAt) < new Date() : false;
+}
+function userAccess(u) {
+  const readonly = isReadonly(u);
+  const status = u.status || 'active';
+  let daysLeft = null;
+  const until = u.plan === 'premium' ? u.planExpiresAt : u.trialEndsAt;
+  if (until) daysLeft = Math.ceil((new Date(until) - Date.now()) / 86400000);
+  return { status, readonly, daysLeft, plan: u.plan || 'free' };
+}
+
+// full guard: logged in + approved + not blocked; writes need an active plan/trial
+function auth(req, res, next) {
+  authAny(req, res, () => {
+    const u = req.user;
+    if (u.role === 'admin') return next();
+    const status = u.status || 'active';
+    if (status === 'blocked') return res.status(403).json({ error: 'Your account has been blocked. Please contact support.', code: 'blocked' });
+    if (status === 'pending') return res.status(403).json({ error: 'Your account is waiting for admin approval.', code: 'pending' });
+    if (status === 'rejected') return res.status(403).json({ error: 'Your account was not approved. Please contact support.', code: 'blocked' });
+    if (req.method !== 'GET' && isReadonly(u)) {
+      return res.status(403).json({ error: 'Your plan has expired — the app is in read-only mode. Upgrade to continue.', code: 'readonly' });
+    }
+    next();
+  });
+}
+
+function adminOnly(req, res, next) {
+  authAny(req, res, () => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Admin access only' });
+    next();
+  });
+}
+
 function publicUser(u) {
   const { passwordHash, ...rest } = u;
-  return rest;
+  return { ...rest, access: userAccess(u) };
 }
 function logActivity(ownerId, propertyId, icon, text) {
   db.activities.unshift({ id: store.id('act'), ownerId, propertyId: propertyId || null, icon, text, createdAt: new Date().toISOString() });
@@ -75,36 +115,96 @@ function ensurePortalToken(tenant) {
   return tenant.portalToken;
 }
 
-/* ---------------- dues engine ---------------- */
-// A tenant owes rent for every month from their join month up to the current
-// month (based on their monthly due day). Paid months are matched by `month`
-// tags on payments ("YYYY-MM").
+/* ---------------- dues engine (money ledger) ---------------- */
+// Billing cycles are anchored to the tenant's JOIN DAY: a fresh rent charge
+// (rent + maintenance) is raised every month on that day, starting from the
+// join date. Money received is applied to the OLDEST charge first (FIFO), so
+// a partial payment always clears previous dues before the current month —
+// and a half-paid month stays visibly pending instead of showing "cleared".
 function monthKey(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-
-function expectedMonths(tenant, now = new Date()) {
-  const join = new Date(tenant.joinDate);
-  if (isNaN(join) || join > now) return [];
-  const months = [];
-  const cur = new Date(join.getFullYear(), join.getMonth(), 1);
-  const last = new Date(now.getFullYear(), now.getMonth(), 1);
-  while (cur <= last) {
-    months.push(monthKey(cur));
-    cur.setMonth(cur.getMonth() + 1);
-  }
-  return months;
+function monthLabel(mk) {
+  const [y, m] = mk.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('en', { month: 'short', year: '2-digit' });
 }
 
-function tenantDues(tenant) {
-  const months = expectedMonths(tenant);
-  const paidMonths = new Set(
-    db.payments.filter(p => p.tenantId === tenant.id).flatMap(p => p.months || [])
-  );
-  const unpaid = months.filter(m => !paidMonths.has(m));
+// start date of the tenant's Nth billing cycle (day clamped to month length)
+function cycleStart(join, index) {
+  const d = new Date(join.getFullYear(), join.getMonth() + index, 1);
+  const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(join.getDate(), daysInMonth));
+  return d;
+}
+
+// every charge the tenant has accrued so far: opening balance (imported old
+// dues) + one rent charge per started billing cycle up to today / leave date
+function tenantCharges(tenant, now = new Date()) {
+  const join = new Date(`${tenant.joinDate}T00:00:00`);
+  if (isNaN(join) || join > now) return [];
+  let end = now;
+  if (tenant.leaveDate) {
+    const leave = new Date(`${tenant.leaveDate}T23:59:59`);
+    if (!isNaN(leave) && leave < end) end = leave;
+  }
+  const charges = [];
+  const opening = Number(tenant.openingDue) || 0;
+  if (opening > 0) {
+    charges.push({ month: 'opening', label: 'Old balance', amount: opening, opening: true });
+  }
+  const perCycle = (Number(tenant.rent) || 0) + (Number(tenant.maintenance) || 0);
+  for (let i = 0; i < 1200; i++) {
+    const start = cycleStart(join, i);
+    if (start > end) break;
+    charges.push({ month: monthKey(start), label: monthLabel(monthKey(start)), amount: perCycle, start });
+  }
+  return charges;
+}
+
+function tenantPaidTotal(tenant) {
+  return db.payments
+    .filter(p => p.tenantId === tenant.id && (p.type || 'rent') === 'rent')
+    .reduce((a, p) => a + (Number(p.amount) || 0), 0);
+}
+
+function tenantDues(tenant, now = new Date()) {
+  const charges = tenantCharges(tenant, now);
+  const totalPaid = tenantPaidTotal(tenant);
+  let pool = totalPaid;
+  const breakdown = charges.map(c => {
+    const applied = Math.min(pool, c.amount);
+    pool -= applied;
+    const due = c.amount - applied;
+    return {
+      month: c.month, label: c.label, opening: !!c.opening,
+      charged: c.amount, paid: applied, due,
+      status: due <= 0 ? 'paid' : applied > 0 ? 'partial' : 'due'
+    };
+  });
+  const totalCharged = charges.reduce((a, c) => a + c.amount, 0);
+  const dueAmount = Math.max(0, totalCharged - totalPaid);
+  const creditBalance = Math.max(0, totalPaid - totalCharged); // wallet / extra paid
+  const last = breakdown[breakdown.length - 1];
+  const currentDue = last && !last.opening ? last.due : 0;
+  const previousDue = dueAmount - currentDue; // arrears carried into this month
   return {
-    unpaidMonths: unpaid,
-    dueAmount: unpaid.length * (Number(tenant.rent) || 0),
-    monthsStayed: months.length
+    dueAmount, creditBalance, previousDue, currentDue,
+    currentMonth: last && !last.opening ? last.month : monthKey(now),
+    totalCharged, totalPaid,
+    monthsStayed: breakdown.filter(b => !b.opening).length,
+    unpaidMonths: breakdown.filter(b => b.due > 0).map(b => b.opening ? 'old balance' : b.month),
+    breakdown: breakdown.slice(-13)
   };
+}
+
+/* ---------------- notifications ---------------- */
+
+function notify(ownerId, propertyId, kind, icon, text, dedupeKey = null) {
+  if (dedupeKey && db.notifications.some(n => n.ownerId === ownerId && n.dedupeKey === dedupeKey)) return;
+  db.notifications.unshift({
+    id: store.id('ntf'), ownerId, propertyId: propertyId || null,
+    kind, icon, text, dedupeKey, read: false, createdAt: new Date().toISOString()
+  });
+  if (db.notifications.length > 800) db.notifications.length = 800;
+  store.save();
 }
 
 /* ---------------- stats helpers ---------------- */
@@ -152,6 +252,8 @@ app.post('/api/auth/signup', (req, res) => {
   if (String(phone).replace(/\D/g, '').length < 10) return res.status(400).json({ error: 'Enter a valid 10 digit phone number' });
   if (String(password).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
   if (db.users.find(u => u.phone === String(phone))) return res.status(409).json({ error: 'This phone number is already registered. Please login.' });
+  const settings = db.settings || {};
+  const trialDays = Number(settings.trialDays) || 30;
   const user = {
     id: store.id('usr'),
     name: String(name).trim(),
@@ -160,11 +262,18 @@ app.post('/api/auth/signup', (req, res) => {
     businessType: businessType || 'hostel',
     language: language || 'en',
     plan: 'free',
+    role: 'owner',
+    status: settings.autoApprove === false ? 'pending' : 'active',
+    trialEndsAt: new Date(Date.now() + trialDays * 86400000).toISOString(),
+    planExpiresAt: null,
     passwordHash: hashPassword(password),
     createdAt: new Date().toISOString()
   };
   db.users.push(user);
   logActivity(user.id, null, '🎉', `Welcome to StaySathi, ${user.name}!`);
+  for (const admin of db.users.filter(u => u.role === 'admin')) {
+    notify(admin.id, null, 'signup', '🆕', `New owner signed up: ${user.name} (${user.phone})${user.status === 'pending' ? ' — waiting for approval' : ''}`);
+  }
   store.saveNow();
   res.json({ token: makeToken(user.id), user: publicUser(user) });
 });
@@ -178,7 +287,7 @@ app.post('/api/auth/login', (req, res) => {
   res.json({ token: makeToken(user.id), user: publicUser(user) });
 });
 
-app.get('/api/me', auth, (req, res) => res.json({ user: publicUser(req.user) }));
+app.get('/api/me', authAny, (req, res) => res.json({ user: publicUser(req.user) }));
 
 app.put('/api/me', auth, (req, res) => {
   const { name, email, language, businessType } = req.body || {};
@@ -205,7 +314,11 @@ app.get('/api/overview', auth, (req, res) => {
     collectedThisMonth: a.collectedThisMonth + p.stats.collectedThisMonth,
     openComplaints: a.openComplaints + p.stats.openComplaints
   }), { properties: 0, beds: 0, occupied: 0, tenants: 0, dueAmount: 0, dueTenants: 0, collectedThisMonth: 0, openComplaints: 0 });
-  res.json({ properties: list, totals, activities: db.activities.filter(a => a.ownerId === req.user.id).slice(0, 20) });
+  res.json({
+    properties: list, totals,
+    activities: db.activities.filter(a => a.ownerId === req.user.id).slice(0, 20),
+    unreadNotifications: db.notifications.filter(n => n.ownerId === req.user.id && !n.read).length
+  });
 });
 
 /* ---------------- properties ---------------- */
@@ -400,7 +513,7 @@ app.post('/api/beds/:id/assign', auth, (req, res) => {
   const prop = bed && db.properties.find(p => p.id === bed.propertyId && p.ownerId === req.user.id);
   if (!prop) return res.status(404).json({ error: 'Bed not found' });
   if (bed.tenantId) return res.status(400).json({ error: 'This bed is already occupied' });
-  const { name, phone, rent, deposit, joinDate, occupation, aadhaar, photo, notes } = req.body || {};
+  const { name, phone, rent, deposit, joinDate, occupation, aadhaar, photo, notes, maintenance, openingDue } = req.body || {};
   if (!name || !phone) return res.status(400).json({ error: 'Tenant name and phone are required' });
   const room = db.rooms.find(r => r.id === bed.roomId);
   const tenant = {
@@ -409,10 +522,14 @@ app.post('/api/beds/:id/assign', auth, (req, res) => {
     name: String(name).trim(), phone: String(phone),
     rent: Number(rent) || room?.rent || 0,
     deposit: Number(deposit) || 0,
+    maintenance: Number(maintenance) || 0,
+    openingDue: Number(openingDue) || 0,
     joinDate: joinDate || new Date().toISOString().slice(0, 10),
+    leaveDate: null,
     occupation: occupation || '', aadhaar: aadhaar || '', photo: photo || null,
     notes: notes || '',
-    kycStatus: aadhaar ? 'submitted' : 'pending',
+    kycStatus: 'pending',
+    kycDocs: [],
     status: 'active',
     portalToken: crypto.randomBytes(12).toString('base64url'),
     createdAt: new Date().toISOString()
@@ -428,12 +545,14 @@ app.put('/api/tenants/:id', auth, (req, res) => {
   const tenant = db.tenants.find(t => t.id === req.params.id);
   const prop = tenant && db.properties.find(p => p.id === tenant.propertyId && p.ownerId === req.user.id);
   if (!prop) return res.status(404).json({ error: 'Tenant not found' });
-  const fields = ['name', 'phone', 'occupation', 'aadhaar', 'photo', 'notes', 'joinDate', 'kycStatus'];
+  const fields = ['name', 'phone', 'occupation', 'aadhaar', 'photo', 'notes', 'joinDate', 'leaveDate'];
   for (const f of fields) if (req.body?.[f] !== undefined) tenant[f] = req.body[f];
   if (req.body?.rent !== undefined) tenant.rent = Number(req.body.rent) || 0;
   if (req.body?.deposit !== undefined) tenant.deposit = Number(req.body.deposit) || 0;
+  if (req.body?.maintenance !== undefined) tenant.maintenance = Number(req.body.maintenance) || 0;
+  if (req.body?.openingDue !== undefined) tenant.openingDue = Number(req.body.openingDue) || 0;
   store.save();
-  res.json({ tenant });
+  res.json({ tenant: { ...tenant, dues: tenantDues(tenant) } });
 });
 
 app.post('/api/tenants/:id/vacate', auth, (req, res) => {
@@ -442,6 +561,7 @@ app.post('/api/tenants/:id/vacate', auth, (req, res) => {
   if (!prop) return res.status(404).json({ error: 'Tenant not found' });
   tenant.status = 'vacated';
   tenant.vacatedAt = new Date().toISOString();
+  if (!tenant.leaveDate) tenant.leaveDate = new Date().toISOString().slice(0, 10); // stop billing today
   const bed = db.beds.find(b => b.id === tenant.bedId);
   if (bed && bed.tenantId === tenant.id) bed.tenantId = null;
   logActivity(req.user.id, prop.id, '👋', `${tenant.name} vacated from ${prop.name}`);
@@ -486,15 +606,17 @@ app.post('/api/payments', auth, (req, res) => {
   const tenant = db.tenants.find(t => t.id === req.body?.tenantId);
   const prop = tenant && db.properties.find(p => p.id === tenant.propertyId && p.ownerId === req.user.id);
   if (!prop) return res.status(404).json({ error: 'Tenant not found' });
-  const { amount, months, mode, note, date } = req.body || {};
+  const { amount, mode, note, date, type } = req.body || {};
   if (!amount || Number(amount) <= 0) return res.status(400).json({ error: 'Enter a valid amount' });
+  const payType = type === 'advance' ? 'advance' : 'rent';
+  const before = payType === 'rent' ? tenantDues(tenant) : null;
   const receiptNo = 'R' + Date.now().toString().slice(-8);
   const payment = {
     id: store.id('pay'),
     tenantId: tenant.id, propertyId: tenant.propertyId,
     tenantName: tenant.name,
     amount: Number(amount),
-    months: Array.isArray(months) && months.length ? months : [monthKey(new Date())],
+    type: payType,
     mode: mode || 'cash',
     note: note || '',
     date: date || new Date().toISOString().slice(0, 10),
@@ -502,9 +624,23 @@ app.post('/api/payments', auth, (req, res) => {
     createdAt: new Date().toISOString()
   };
   db.payments.push(payment);
-  logActivity(req.user.id, prop.id, '💰', `₹${payment.amount} rent received from ${tenant.name} (${payment.mode.toUpperCase()})`);
+  if (payType === 'advance') {
+    tenant.deposit = (Number(tenant.deposit) || 0) + payment.amount;
+    logActivity(req.user.id, prop.id, '🏦', `₹${payment.amount} advance received from ${tenant.name}`);
+    notify(req.user.id, prop.id, 'payment', '🏦', `Advance received: ₹${payment.amount} from ${tenant.name}`);
+    store.saveNow();
+    return res.json({ payment, tenant });
+  }
+  const dues = tenantDues(tenant);
+  // remember how the money landed so the receipt can say "₹X still pending"
+  payment.clearedOldDues = Math.min(payment.amount, before.previousDue);
+  payment.balanceAfter = dues.dueAmount;
+  logActivity(req.user.id, prop.id, '💰',
+    `₹${payment.amount} rent received from ${tenant.name} (${payment.mode.toUpperCase()})${dues.dueAmount > 0 ? ` — ₹${dues.dueAmount} still pending` : ' — all clear'}`);
+  notify(req.user.id, prop.id, 'payment', '💰',
+    `Payment received: ₹${payment.amount} from ${tenant.name}${dues.dueAmount > 0 ? ` (₹${dues.dueAmount} still pending)` : ''}`);
   store.saveNow();
-  res.json({ payment });
+  res.json({ payment, dues });
 });
 
 app.delete('/api/payments/:id', auth, (req, res) => {
@@ -554,6 +690,93 @@ app.get('/api/tenants/:id/reminder', auth, (req, res) => {
   res.json({ text, phone: tenant.phone, dueAmount: d.dueAmount });
 });
 
+/* ---------------- KYC ---------------- */
+// A tenant's KYC is only "done" when at least one ID document is actually
+// uploaded — by the tenant through their portal link, or by the owner.
+// Status flow: pending → submitted (doc uploaded) → verified (owner checked).
+
+function ownTenant(req, res) {
+  const tenant = db.tenants.find(t => t.id === req.params.id);
+  const prop = tenant && db.properties.find(p => p.id === tenant.propertyId && p.ownerId === req.user.id);
+  if (!prop) { res.status(404).json({ error: 'Tenant not found' }); return null; }
+  return { tenant, prop };
+}
+
+function addKycDoc(tenant, { docType, idNumber, image, uploadedBy }) {
+  tenant.kycDocs = tenant.kycDocs || [];
+  if (tenant.kycDocs.length >= 3) return { error: 'Maximum 3 documents per tenant. Delete one first.' };
+  if (!image) return { error: 'Attach a photo/scan of the document' };
+  const doc = {
+    id: store.id('kyc'),
+    docType: docType || 'aadhaar',
+    idNumber: String(idNumber || '').slice(0, 40),
+    image, uploadedBy,
+    createdAt: new Date().toISOString()
+  };
+  tenant.kycDocs.push(doc);
+  if (tenant.kycStatus !== 'verified') tenant.kycStatus = 'submitted';
+  return { doc };
+}
+
+app.post('/api/tenants/:id/kyc-docs', auth, (req, res) => {
+  const own = ownTenant(req, res); if (!own) return;
+  const out = addKycDoc(own.tenant, { ...req.body, uploadedBy: 'owner' });
+  if (out.error) return res.status(400).json({ error: out.error });
+  logActivity(req.user.id, own.prop.id, '🪪', `KYC document (${out.doc.docType}) added for ${own.tenant.name}`);
+  store.saveNow();
+  res.json({ doc: out.doc, kycStatus: own.tenant.kycStatus });
+});
+
+// doc images are heavy; the list endpoints send metadata only and the image
+// is fetched one at a time on demand
+app.get('/api/tenants/:id/kyc-docs/:docId/image', auth, (req, res) => {
+  const own = ownTenant(req, res); if (!own) return;
+  const doc = (own.tenant.kycDocs || []).find(d => d.id === req.params.docId);
+  if (!doc) return res.status(404).json({ error: 'Document not found' });
+  res.json({ image: doc.image, docType: doc.docType, idNumber: doc.idNumber });
+});
+
+app.delete('/api/tenants/:id/kyc-docs/:docId', auth, (req, res) => {
+  const own = ownTenant(req, res); if (!own) return;
+  const t = own.tenant;
+  t.kycDocs = (t.kycDocs || []).filter(d => d.id !== req.params.docId);
+  if (t.kycDocs.length === 0) t.kycStatus = 'pending'; // no proof left = not done
+  store.saveNow();
+  res.json({ ok: true, kycStatus: t.kycStatus });
+});
+
+app.post('/api/tenants/:id/kyc-status', auth, (req, res) => {
+  const own = ownTenant(req, res); if (!own) return;
+  const t = own.tenant;
+  const status = req.body?.status;
+  if (!['pending', 'submitted', 'verified', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid KYC status' });
+  }
+  if (status === 'verified' && !(t.kycDocs || []).length) {
+    return res.status(400).json({ error: 'Upload an ID proof first — KYC can only be marked done after a document is uploaded' });
+  }
+  t.kycStatus = status;
+  logActivity(req.user.id, own.prop.id, '🪪', `KYC ${status} for ${t.name}`);
+  store.saveNow();
+  res.json({ kycStatus: t.kycStatus });
+});
+
+// bulk view / export of KYC records across properties
+app.get('/api/kyc-records', auth, (req, res) => {
+  const myProps = new Set(db.properties.filter(p => p.ownerId === req.user.id).map(p => p.id));
+  const rows = db.tenants.filter(t => myProps.has(t.propertyId) && t.status === 'active').map(t => {
+    const room = db.rooms.find(r => r.id === t.roomId);
+    const propItem = db.properties.find(p => p.id === t.propertyId);
+    return {
+      id: t.id, name: t.name, phone: t.phone,
+      propertyName: propItem?.name || '', roomName: room?.name || '',
+      kycStatus: t.kycStatus || 'pending',
+      docs: (t.kycDocs || []).map(d => ({ id: d.id, docType: d.docType, idNumber: d.idNumber, uploadedBy: d.uploadedBy, createdAt: d.createdAt }))
+    };
+  });
+  res.json({ records: rows });
+});
+
 /* ---------------- tenant portal (public, token-based) ---------------- */
 
 // owner generates / fetches the share link for a tenant
@@ -590,12 +813,31 @@ app.get('/api/portal/:token', (req, res) => {
   res.json({
     tenant: {
       name: tenant.name, phone: tenant.phone, rent: tenant.rent, deposit: tenant.deposit,
-      joinDate: tenant.joinDate, kycStatus: tenant.kycStatus
+      maintenance: tenant.maintenance || 0,
+      joinDate: tenant.joinDate, kycStatus: tenant.kycStatus || 'pending',
+      kycDocs: (tenant.kycDocs || []).map(d => ({ id: d.id, docType: d.docType, idNumber: d.idNumber, uploadedBy: d.uploadedBy, createdAt: d.createdAt }))
     },
     property: prop ? { name: prop.name, icon: prop.icon, city: prop.city, type: prop.type } : null,
     owner: owner ? { name: owner.name, phone: owner.phone } : null,
     roomName: room?.name || '', dues, payments, notices, complaints
   });
+});
+
+// tenant uploads their own ID proof — this is what marks KYC as done
+app.post('/api/portal/:token/kyc', (req, res) => {
+  const tenant = portalTenant(req, res); if (!tenant) return;
+  const { docType, idNumber, image, fullName, address } = req.body || {};
+  const out = addKycDoc(tenant, { docType, idNumber, image, uploadedBy: 'tenant' });
+  if (out.error) return res.status(400).json({ error: out.error });
+  if (fullName) tenant.kycName = String(fullName).slice(0, 80);
+  if (address) tenant.kycAddress = String(address).slice(0, 300);
+  const prop = db.properties.find(p => p.id === tenant.propertyId);
+  if (prop) {
+    logActivity(prop.ownerId, prop.id, '🪪', `${tenant.name} uploaded KYC document (${out.doc.docType}) — verify it`);
+    notify(prop.ownerId, prop.id, 'kyc', '🪪', `${tenant.name} submitted KYC (${out.doc.docType}) — tap to verify`);
+  }
+  store.saveNow();
+  res.json({ ok: true, kycStatus: tenant.kycStatus });
 });
 
 app.post('/api/portal/:token/complaints', (req, res) => {
@@ -611,7 +853,10 @@ app.post('/api/portal/:token/complaints', (req, res) => {
     status: 'open', source: 'portal', createdAt: new Date().toISOString()
   };
   db.complaints.push(complaint);
-  if (prop) logActivity(prop.ownerId, prop.id, '🛠️', `${tenant.name} raised a complaint (${complaint.category}) at ${prop.name}`);
+  if (prop) {
+    logActivity(prop.ownerId, prop.id, '🛠️', `${tenant.name} raised a complaint (${complaint.category}) at ${prop.name}`);
+    notify(prop.ownerId, prop.id, 'complaint', '🛠️', `New complaint from ${tenant.name} (${complaint.category}): ${complaint.text.slice(0, 80)}`);
+  }
   store.saveNow();
   res.json({ complaint });
 });
@@ -622,13 +867,192 @@ app.post('/api/portal/:token/paid-claim', (req, res) => {
   const prop = db.properties.find(p => p.id === tenant.propertyId);
   const amount = Number(req.body?.amount) || 0;
   const note = String(req.body?.note || '').slice(0, 200);
+  const screenshot = req.body?.screenshot || null; // UPI payment proof
   if (amount <= 0) return res.status(400).json({ error: 'Enter the amount you paid' });
+  db.paymentClaims = db.paymentClaims || [];
+  db.paymentClaims.unshift({
+    id: store.id('clm'), tenantId: tenant.id, propertyId: tenant.propertyId,
+    tenantName: tenant.name, amount, note, screenshot, status: 'open',
+    createdAt: new Date().toISOString()
+  });
+  if (db.paymentClaims.length > 300) db.paymentClaims.length = 300;
   if (prop) {
     logActivity(prop.ownerId, prop.id, '💸',
       `${tenant.name} says they paid ₹${amount}${note ? ` (${note})` : ''} — verify & record it`);
+    notify(prop.ownerId, prop.id, 'claim', '💸',
+      `${tenant.name} requests to record a payment of ₹${amount}${screenshot ? ' (screenshot attached)' : ''}`);
   }
   store.saveNow();
   res.json({ ok: true });
+});
+
+/* ---------------- first-time setup wizard ---------------- */
+// Creates a property with floors, auto-numbered rooms and beds in one shot.
+app.post('/api/setup', auth, (req, res) => {
+  const { name, type, city, address, color, icon, pin, floors, roomsPerFloor, bedsPerRoom, rent } = req.body || {};
+  if (!name) return res.status(400).json({ error: 'Give your property a name' });
+  const nFloors = Math.min(Math.max(Number(floors) || 1, 1), 30);
+  const nRooms = Math.min(Math.max(Number(roomsPerFloor) || 0, 0), 40);
+  const nBeds = Math.min(Math.max(Number(bedsPerRoom) || 1, 1), 20);
+  const roomRent = Number(rent) || 0;
+  const prop = {
+    id: store.id('prp'), ownerId: req.user.id,
+    name: String(name).trim(), type: type || 'hostel',
+    address: address || '', city: city || '',
+    color: color || '#6C5CE7', icon: icon || '🏠',
+    pinHash: pin ? hashPassword(pin) : null,
+    createdAt: new Date().toISOString()
+  };
+  db.properties.push(prop);
+  let roomsCreated = 0, bedsCreated = 0;
+  for (let f = 0; f < nFloors; f++) {
+    const floor = { id: store.id('flr'), propertyId: prop.id, name: f === 0 ? 'Ground Floor' : `Floor ${f}`, order: f };
+    db.floors.push(floor);
+    for (let r = 1; r <= nRooms; r++) {
+      const roomName = f === 0 ? `G${String(r).padStart(2, '0')}` : `${f}${String(r).padStart(2, '0')}`;
+      const room = {
+        id: store.id('rom'), propertyId: prop.id, floorId: floor.id,
+        name: roomName, capacity: nBeds, rent: roomRent, createdAt: new Date().toISOString()
+      };
+      db.rooms.push(room);
+      roomsCreated++;
+      for (let b = 0; b < nBeds; b++) {
+        db.beds.push({ id: store.id('bed'), roomId: room.id, floorId: floor.id, propertyId: prop.id, name: `Bed ${b + 1}`, tenantId: null });
+        bedsCreated++;
+      }
+    }
+  }
+  logActivity(req.user.id, prop.id, '🪄', `Setup complete: ${prop.name} — ${nFloors} floors, ${roomsCreated} rooms, ${bedsCreated} beds`);
+  store.saveNow();
+  res.json({ property: publicProperty(prop), roomsCreated, bedsCreated });
+});
+
+/* ---------------- smart import (Excel / photo register) ---------------- */
+// The client parses the sheet/photo and sends normalized rows; this endpoint
+// creates any missing floors/rooms/beds and fills tenants with rent, advance
+// and old dues in one transaction-like pass.
+app.post('/api/properties/:id/import', auth, (req, res) => {
+  const prop = ownProperty(req, res); if (!prop) return;
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows.slice(0, 1000) : [];
+  if (!rows.length) return res.status(400).json({ error: 'No rows to import' });
+  const summary = { floorsCreated: 0, roomsCreated: 0, bedsCreated: 0, tenantsCreated: 0, skipped: 0 };
+  const today = new Date().toISOString().slice(0, 10);
+
+  const floorFor = (raw, roomName) => {
+    let label = String(raw ?? '').trim();
+    if (!label && /^\d{3,}$/.test(roomName)) label = roomName[0]; // 101 → floor 1
+    if (/^\d+$/.test(label)) label = Number(label) === 0 ? 'Ground Floor' : `Floor ${Number(label)}`;
+    if (!label) label = 'Ground Floor';
+    let floor = db.floors.find(f => f.propertyId === prop.id && f.name.toLowerCase() === label.toLowerCase());
+    if (!floor) {
+      floor = { id: store.id('flr'), propertyId: prop.id, name: label, order: db.floors.filter(f => f.propertyId === prop.id).length };
+      db.floors.push(floor);
+      summary.floorsCreated++;
+    }
+    return floor;
+  };
+
+  for (const raw of rows) {
+    const roomName = String(raw.room ?? '').trim();
+    if (!roomName) { summary.skipped++; continue; }
+    const floor = floorFor(raw.floor, roomName);
+    let room = db.rooms.find(r => r.propertyId === prop.id && r.name.toLowerCase() === roomName.toLowerCase());
+    if (!room) {
+      room = {
+        id: store.id('rom'), propertyId: prop.id, floorId: floor.id,
+        name: roomName, capacity: 0, rent: Number(raw.rent) || 0, createdAt: new Date().toISOString()
+      };
+      db.rooms.push(room);
+      summary.roomsCreated++;
+    }
+    // find the requested bed, else the first vacant one, else grow the room
+    const roomBeds = () => db.beds.filter(b => b.roomId === room.id);
+    let bed = null;
+    const wantBed = String(raw.bed ?? '').trim();
+    if (wantBed) {
+      const label = /^\d+$/.test(wantBed) ? `Bed ${wantBed}` : wantBed;
+      bed = roomBeds().find(b => b.name.toLowerCase() === label.toLowerCase());
+    }
+    if (!bed) bed = roomBeds().find(b => !b.tenantId);
+    if (!bed || (bed.tenantId && String(raw.name ?? '').trim())) {
+      bed = { id: store.id('bed'), roomId: room.id, floorId: floor.id, propertyId: prop.id, name: wantBed && /^\d+$/.test(wantBed) ? `Bed ${wantBed}` : `Bed ${roomBeds().length + 1}`, tenantId: null };
+      db.beds.push(bed);
+      summary.bedsCreated++;
+    }
+    room.capacity = Math.max(room.capacity, roomBeds().length);
+
+    const name = String(raw.name ?? '').trim();
+    if (!name) continue; // vacant room/bed row — structure only
+    if (bed.tenantId) { summary.skipped++; continue; }
+    const tenant = {
+      id: store.id('tnt'),
+      propertyId: prop.id, bedId: bed.id, roomId: room.id, floorId: floor.id,
+      name, phone: String(raw.phone ?? '').replace(/\D/g, '').slice(-12),
+      rent: Number(raw.rent) || room.rent || 0,
+      deposit: Number(raw.advance) || 0,
+      maintenance: Number(raw.maintenance) || 0,
+      openingDue: Math.max(0, Number(raw.due) || 0),
+      joinDate: raw.joinDate || today,
+      leaveDate: null,
+      occupation: String(raw.occupation ?? ''), aadhaar: String(raw.aadhaar ?? ''),
+      photo: null, notes: 'Imported', kycStatus: 'pending', kycDocs: [],
+      status: 'active', portalToken: crypto.randomBytes(12).toString('base64url'),
+      createdAt: new Date().toISOString()
+    };
+    db.tenants.push(tenant);
+    bed.tenantId = tenant.id;
+    summary.tenantsCreated++;
+  }
+  logActivity(req.user.id, prop.id, '📥',
+    `Smart import: ${summary.tenantsCreated} tenants, ${summary.roomsCreated} rooms, ${summary.bedsCreated} beds added to ${prop.name}`);
+  store.saveNow();
+  res.json({ summary });
+});
+
+/* ---------------- notifications ---------------- */
+
+app.get('/api/notifications', auth, (req, res) => {
+  // synthesize once-a-month rent-due reminders so the owner never misses them
+  const mk = monthKey(new Date());
+  const myProps = new Set(db.properties.filter(p => p.ownerId === req.user.id).map(p => p.id));
+  for (const t of db.tenants.filter(t => t.status === 'active' && myProps.has(t.propertyId))) {
+    const d = tenantDues(t);
+    if (d.dueAmount > 0) {
+      notify(req.user.id, t.propertyId, 'due', '⏰',
+        `Rent due: ${t.name} owes ₹${d.dueAmount}${d.previousDue > 0 ? ` (₹${d.previousDue} old dues)` : ''}`,
+        `due:${t.id}:${mk}`);
+    }
+  }
+  const list = db.notifications.filter(n => n.ownerId === req.user.id).slice(0, 100);
+  res.json({ notifications: list, unread: list.filter(n => !n.read).length });
+});
+
+app.post('/api/notifications/read', auth, (req, res) => {
+  const ids = req.body?.ids;
+  for (const n of db.notifications) {
+    if (n.ownerId !== req.user.id) continue;
+    if (!ids || ids.includes(n.id)) n.read = true;
+  }
+  store.save();
+  res.json({ ok: true });
+});
+
+/* ---------------- tenant payment claims (owner review) ---------------- */
+
+app.get('/api/payment-claims', auth, (req, res) => {
+  const myProps = new Set(db.properties.filter(p => p.ownerId === req.user.id).map(p => p.id));
+  const list = (db.paymentClaims || []).filter(c => myProps.has(c.propertyId));
+  res.json({ claims: list });
+});
+
+app.post('/api/payment-claims/:id/resolve', auth, (req, res) => {
+  const claim = (db.paymentClaims || []).find(c => c.id === req.params.id);
+  const prop = claim && db.properties.find(p => p.id === claim.propertyId && p.ownerId === req.user.id);
+  if (!prop) return res.status(404).json({ error: 'Claim not found' });
+  claim.status = req.body?.accept ? 'accepted' : 'dismissed';
+  claim.resolvedAt = new Date().toISOString();
+  store.saveNow();
+  res.json({ claim });
 });
 
 /* ---------------- expenses ---------------- */
@@ -823,33 +1247,214 @@ app.get('/api/reports', auth, (req, res) => {
   const propFilter = req.query.propertyId;
   const ids = new Set(myProps.filter(p => !propFilter || p.id === propFilter).map(p => p.id));
   const now = new Date();
+  const inScope = (x) => ids.has(x.propertyId);
+
+  // income vs expense, last 6 months
   const series = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const mk = monthKey(d);
-    const income = db.payments.filter(p => ids.has(p.propertyId) && (p.date || '').startsWith(mk)).reduce((a, p) => a + (Number(p.amount) || 0), 0);
-    const expense = db.expenses.filter(e => ids.has(e.propertyId) && (e.date || '').startsWith(mk)).reduce((a, e) => a + (Number(e.amount) || 0), 0);
+    const income = db.payments.filter(p => inScope(p) && (p.date || '').startsWith(mk)).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const expense = db.expenses.filter(e => inScope(e) && (e.date || '').startsWith(mk)).reduce((a, e) => a + (Number(e.amount) || 0), 0);
     series.push({ month: mk, label: d.toLocaleString('en', { month: 'short' }), income, expense, profit: income - expense });
   }
+
   const byCategory = {};
   const mkNow = monthKey(now);
-  for (const e of db.expenses.filter(e => ids.has(e.propertyId) && (e.date || '').startsWith(mkNow))) {
+  for (const e of db.expenses.filter(e => inScope(e) && (e.date || '').startsWith(mkNow))) {
     byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount);
   }
-  res.json({ series, expenseByCategory: byCategory });
+
+  // occupancy
+  const beds = db.beds.filter(inScope);
+  const occupied = beds.filter(b => b.tenantId).length;
+  const occupancy = {
+    beds: beds.length, occupied, vacant: beds.length - occupied,
+    rate: beds.length ? Math.round(occupied / beds.length * 100) : 0
+  };
+
+  // rent charged vs collected per month (paid vs pending trend, last 6 months)
+  const tenants = db.tenants.filter(inScope);
+  const charged = {}; // month → total rent raised that month
+  for (const t of tenants) {
+    for (const c of tenantCharges(t, now)) {
+      if (c.opening) { continue; }
+      charged[c.month] = (charged[c.month] || 0) + c.amount;
+    }
+  }
+  const rentSeries = series.map(s => {
+    const collected = db.payments.filter(p => inScope(p) && (p.type || 'rent') === 'rent' && (p.date || '').startsWith(s.month))
+      .reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const due = charged[s.month] || 0;
+    return { month: s.month, label: s.label, charged: due, collected, pending: Math.max(0, due - collected) };
+  });
+
+  // revenue trend, last 12 months (all money in)
+  const revenue = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mk = monthKey(d);
+    revenue.push({
+      month: mk, label: d.toLocaleString('en', { month: 'short' }),
+      amount: db.payments.filter(p => inScope(p) && (p.date || '').startsWith(mk)).reduce((a, p) => a + (Number(p.amount) || 0), 0)
+    });
+  }
+
+  // floor-wise: occupancy + this month's collection + open dues per floor
+  const floors = db.floors.filter(inScope).sort((a, b) => a.order - b.order).map(f => {
+    const fBeds = db.beds.filter(b => b.floorId === f.id);
+    const fTenants = db.tenants.filter(t => t.floorId === f.id && t.status === 'active');
+    const tIds = new Set(fTenants.map(t => t.id));
+    const collected = db.payments.filter(p => tIds.has(p.tenantId) && (p.date || '').startsWith(mkNow))
+      .reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const dueAmount = fTenants.reduce((a, t) => a + tenantDues(t).dueAmount, 0);
+    const propItem = myProps.find(p => p.id === f.propertyId);
+    return {
+      id: f.id, name: f.name, propertyName: propItem?.name || '',
+      beds: fBeds.length, occupied: fBeds.filter(b => b.tenantId).length,
+      collected, dueAmount
+    };
+  }).filter(f => f.beds > 0);
+
+  res.json({ series, expenseByCategory: byCategory, occupancy, rentSeries, revenue, floors });
 });
 
 app.get('/api/activities', auth, (req, res) => {
   res.json({ activities: db.activities.filter(a => a.ownerId === req.user.id).slice(0, 50) });
 });
 
+/* ---------------- admin (special user) ---------------- */
+
+function adminUserRow(u) {
+  const props = db.properties.filter(p => p.ownerId === u.id);
+  const propIds = new Set(props.map(p => p.id));
+  const beds = db.beds.filter(b => propIds.has(b.propertyId));
+  const tenants = db.tenants.filter(t => propIds.has(t.propertyId) && t.status === 'active');
+  const mk = monthKey(new Date());
+  const collectedThisMonth = db.payments
+    .filter(p => propIds.has(p.propertyId) && (p.date || '').startsWith(mk))
+    .reduce((a, p) => a + (Number(p.amount) || 0), 0);
+  const lastActivity = db.activities.find(a => a.ownerId === u.id)?.createdAt || u.createdAt;
+  return {
+    ...publicUser(u),
+    stats: {
+      properties: props.length, beds: beds.length,
+      occupied: beds.filter(b => b.tenantId).length,
+      tenants: tenants.length, collectedThisMonth, lastActivity
+    }
+  };
+}
+
+app.get('/api/admin/users', adminOnly, (req, res) => {
+  res.json({
+    users: db.users.filter(u => u.role !== 'admin').map(adminUserRow),
+    settings: db.settings || { autoApprove: true, trialDays: 30 }
+  });
+});
+
+// approve / reject / block / unblock / change plan / extend trial — one endpoint
+app.put('/api/admin/users/:id', adminOnly, (req, res) => {
+  const u = db.users.find(x => x.id === req.params.id && x.role !== 'admin');
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const { status, plan, trialEndsAt, planExpiresAt, name, phone, email } = req.body || {};
+  if (status && ['active', 'pending', 'blocked', 'rejected'].includes(status)) u.status = status;
+  if (plan && ['free', 'premium'].includes(plan)) u.plan = plan;
+  if (trialEndsAt !== undefined) u.trialEndsAt = trialEndsAt;
+  if (planExpiresAt !== undefined) u.planExpiresAt = planExpiresAt;
+  if (name) u.name = String(name).trim();
+  if (phone) u.phone = String(phone);
+  if (email !== undefined) u.email = email;
+  if (status === 'active') notify(u.id, null, 'account', '✅', 'Your account has been approved. Welcome to StaySathi!');
+  if (plan === 'premium') notify(u.id, null, 'account', '⭐', 'Your plan was upgraded to Premium. Enjoy!');
+  store.saveNow();
+  res.json({ user: adminUserRow(u) });
+});
+
+app.post('/api/admin/users/:id/reset-password', adminOnly, (req, res) => {
+  const u = db.users.find(x => x.id === req.params.id && x.role !== 'admin');
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const pw = req.body?.password;
+  if (!pw || String(pw).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
+  u.passwordHash = hashPassword(pw);
+  store.saveNow();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/users/:id', adminOnly, (req, res) => {
+  const u = db.users.find(x => x.id === req.params.id && x.role !== 'admin');
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  const propIds = new Set(db.properties.filter(p => p.ownerId === u.id).map(p => p.id));
+  db.users = db.users.filter(x => x.id !== u.id);
+  db.properties = db.properties.filter(p => p.ownerId !== u.id);
+  for (const key of ['floors', 'rooms', 'beds', 'tenants', 'payments', 'expenses', 'complaints', 'staff', 'meters']) {
+    db[key] = db[key].filter(x => !propIds.has(x.propertyId));
+  }
+  db.notices = db.notices.filter(n => n.ownerId !== u.id);
+  db.activities = db.activities.filter(a => a.ownerId !== u.id);
+  db.notifications = db.notifications.filter(n => n.ownerId !== u.id);
+  store.saveNow();
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/stats', adminOnly, (req, res) => {
+  const owners = db.users.filter(u => u.role !== 'admin');
+  const now = new Date();
+  const signups = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const mk = monthKey(d);
+    signups.push({
+      month: mk, label: d.toLocaleString('en', { month: 'short' }),
+      count: owners.filter(u => (u.createdAt || '').startsWith(mk)).length
+    });
+  }
+  res.json({
+    totals: {
+      users: owners.length,
+      active: owners.filter(u => (u.status || 'active') === 'active').length,
+      pending: owners.filter(u => u.status === 'pending').length,
+      blocked: owners.filter(u => u.status === 'blocked' || u.status === 'rejected').length,
+      premium: owners.filter(u => u.plan === 'premium').length,
+      properties: db.properties.length,
+      beds: db.beds.length,
+      tenants: db.tenants.filter(t => t.status === 'active').length,
+      paymentsRecorded: db.payments.length
+    },
+    signups
+  });
+});
+
+app.put('/api/admin/settings', adminOnly, (req, res) => {
+  db.settings = db.settings || { autoApprove: true, trialDays: 30 };
+  if (req.body?.autoApprove !== undefined) db.settings.autoApprove = !!req.body.autoApprove;
+  if (req.body?.trialDays !== undefined) db.settings.trialDays = Math.max(1, Number(req.body.trialDays) || 30);
+  store.saveNow();
+  res.json({ settings: db.settings });
+});
+
 /* ---------------- demo seed ---------------- */
+
+// platform admin — approves owners, manages plans, fixes data
+function seedAdmin() {
+  if (db.users.find(u => u.role === 'admin')) return;
+  db.users.push({
+    id: store.id('usr'), name: 'StaySathi Admin', phone: process.env.ADMIN_PHONE || '9999999999',
+    email: 'admin@staysathi.in', businessType: 'hostel', language: 'en',
+    plan: 'premium', role: 'admin', status: 'active', trialEndsAt: null, planExpiresAt: null,
+    passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123'),
+    createdAt: new Date().toISOString()
+  });
+  store.saveNow();
+  console.log(`Seeded admin account: phone ${process.env.ADMIN_PHONE || '9999999999'} / password ${process.env.ADMIN_PASSWORD ? '(from env)' : 'admin123'}`);
+}
+seedAdmin();
 
 function seedDemo() {
   if (db.users.find(u => u.phone === '9876543210')) return;
   const owner = {
     id: store.id('usr'), name: 'Ramesh Kumar', phone: '9876543210', email: 'demo@staysathi.in',
-    businessType: 'hostel', language: 'en', plan: 'premium',
+    businessType: 'hostel', language: 'en', plan: 'premium', role: 'owner', status: 'active',
+    trialEndsAt: null, planExpiresAt: null,
     passwordHash: hashPassword('demo123'), createdAt: new Date().toISOString()
   };
   db.users.push(owner);
@@ -901,22 +1506,27 @@ function seedDemo() {
             const joinedMonths = 1 + ((ti * 7) % 5); // 1..5 months ago
             const tenant = {
               id: store.id('tnt'), propertyId: prop.id, bedId: bed.id, roomId: room.id, floorId: floor.id,
-              name: tn, phone: tp, rent: def.rent, deposit: def.rent, joinDate: monthsAgo(joinedMonths),
+              name: tn, phone: tp, rent: def.rent, deposit: def.rent, maintenance: 0, openingDue: 0,
+              joinDate: monthsAgo(joinedMonths), leaveDate: null,
               occupation: ['Student', 'Software Engineer', 'Shop Owner', 'Nurse'][ti % 4],
-              aadhaar: '', photo: null, notes: '', kycStatus: ti % 3 === 0 ? 'pending' : 'verified',
+              aadhaar: '', photo: null, notes: '', kycStatus: 'pending', kycDocs: [],
               status: 'active', portalToken: crypto.randomBytes(12).toString('base64url'),
               createdAt: new Date().toISOString()
             };
             db.tenants.push(tenant);
             bed.tenantId = tenant.id;
-            // pay all months except leave the most recent 0-2 months unpaid
+            // pay all months except the most recent 0-2; every 4th tenant only
+            // half-pays the last one so partial dues show up in the demo
             const unpaidTail = ti % 3; // 0,1,2
-            const months = expectedMonths(tenant);
+            const months = tenantCharges(tenant).filter(c => !c.opening).map(c => c.month);
             const paid = months.slice(0, Math.max(0, months.length - unpaidTail));
-            for (const mk of paid) {
+            for (let mi = 0; mi < paid.length; mi++) {
+              const mk = paid[mi];
+              const half = ti % 4 === 0 && mi === paid.length - 1;
               db.payments.push({
                 id: store.id('pay'), tenantId: tenant.id, propertyId: prop.id, tenantName: tenant.name,
-                amount: tenant.rent, months: [mk], mode: ti % 2 ? 'upi' : 'cash', note: '',
+                amount: half ? Math.round(tenant.rent / 2) : tenant.rent, type: 'rent',
+                mode: ti % 2 ? 'upi' : 'cash', note: half ? 'Partial payment' : '',
                 date: `${mk}-06`, receiptNo: 'R' + Math.floor(100000 + Math.random() * 899999),
                 createdAt: new Date().toISOString()
               });

@@ -6,10 +6,12 @@ import Money from './Money.jsx';
 import People from './People.jsx';
 import Alerts from './Alerts.jsx';
 import More from './More.jsx';
+import Admin from './Admin.jsx';
 
 export default function Shell({ user, setUser, onLogout }) {
   const { t } = useLang();
-  const [tab, setTab] = useState('home');
+  const isAdmin = user.role === 'admin';
+  const [tab, setTab] = useState(isAdmin ? 'admin' : 'home');
   const [seg, setSeg] = useState(null); // optional sub-section hint when jumping tabs
   const [overview, setOverview] = useState(null);
 
@@ -25,7 +27,8 @@ export default function Shell({ user, setUser, onLogout }) {
   }, []);
 
   const dueCount = overview?.totals?.dueTenants || 0;
-  const alertCount = overview?.totals?.openComplaints || 0;
+  const alertCount = (overview?.totals?.openComplaints || 0) + (overview?.unreadNotifications || 0);
+  const readonly = user.access?.readonly;
 
   const tabs = [
     ['home', '🫧', t('navHome')],
@@ -34,6 +37,7 @@ export default function Shell({ user, setUser, onLogout }) {
     ['alerts', '🔔', t('navAlerts'), alertCount],
     ['more', '☰', t('navMore')]
   ];
+  if (isAdmin) tabs.splice(4, 0, ['admin', '🛡️', t('adminPanel')]);
 
   return (
     <div className="shell">
@@ -44,10 +48,15 @@ export default function Shell({ user, setUser, onLogout }) {
         </div>
       </header>
 
+      {readonly && (
+        <div className="readonly-banner">🔒 {t('readonlyBanner')}</div>
+      )}
+
       {tab === 'home' && <BubbleHome overview={overview} refreshOverview={refresh} go={go} />}
       {tab === 'money' && <Money overview={overview} refreshOverview={refresh} initialSeg={seg} />}
       {tab === 'people' && <People overview={overview} refreshOverview={refresh} initialSeg={seg} />}
       {tab === 'alerts' && <Alerts overview={overview} refreshOverview={refresh} initialSeg={seg} />}
+      {tab === 'admin' && isAdmin && <Admin />}
       {tab === 'more' && <More overview={overview} user={user} setUser={setUser} onLogout={onLogout} refreshOverview={refresh} />}
 
       <nav className="bottom-nav">

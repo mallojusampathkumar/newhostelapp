@@ -14,6 +14,11 @@ export async function api(path, { method = 'GET', body } = {}) {
   if (!res.ok) {
     const err = new Error(data?.error || 'Something went wrong. Please try again.');
     err.status = res.status;
+    err.code = data?.code;
+    // account got blocked / trial expired mid-session → let the app shell react
+    if (res.status === 403 && (data?.code === 'blocked' || data?.code === 'pending')) {
+      window.dispatchEvent(new CustomEvent('ss-access', { detail: { code: data.code } }));
+    }
     throw err;
   }
   return data;

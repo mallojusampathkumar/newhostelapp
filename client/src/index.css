@@ -439,3 +439,46 @@ footer { text-align: center; color: var(--muted); padding: 50px 0 40px; font-siz
 .portal-due .amt { font-size: 32px; font-weight: 800; }
 
 @media (min-width: 640px) { .page { padding-top: 26px; } }
+
+/* ---------- read-only banner (expired trial / plan) ---------- */
+.readonly-banner {
+  background: linear-gradient(90deg, #f59f00, #ffc14d); color: #4a3200;
+  font-weight: 700; font-size: 13.5px; text-align: center;
+  padding: 8px 14px; border-radius: 0 0 14px 14px;
+}
+
+/* ---------- setup wizard ---------- */
+.wizard-steps { display: flex; gap: 4px; }
+.wizard-step { flex: 1; text-align: center; opacity: .45; }
+.wizard-step.on, .wizard-step.done { opacity: 1; }
+.wizard-step .dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%; font-weight: 800; font-size: 13px;
+  background: var(--surface2); border: 1.5px solid var(--border2); color: var(--text);
+}
+.wizard-step.on .dot { background: var(--violet); border-color: var(--violet); color: #fff; }
+.wizard-step.done .dot { background: var(--green); border-color: var(--green); color: #fff; }
+.wizard-step .lbl { display: block; font-size: 10.5px; margin-top: 4px; color: var(--muted); }
+.stepper {
+  display: flex; align-items: center; gap: 14px; justify-content: center;
+  background: var(--surface2); border-radius: 14px; padding: 6px;
+}
+.stepper button {
+  width: 46px; height: 46px; border-radius: 12px; border: 1.5px solid var(--border2);
+  background: var(--card); font-size: 22px; font-weight: 800; cursor: pointer; color: var(--text);
+}
+.stepper b { font-size: 22px; min-width: 44px; text-align: center; }
+
+/* ---------- smart import preview grid ---------- */
+.import-grid { max-height: 44vh; overflow: auto; border: 1px solid var(--border); border-radius: 14px; }
+.import-row {
+  display: grid; gap: 3px; padding: 3px 6px; align-items: center;
+  grid-template-columns: 52px 36px 1.4fr 1fr 58px 58px 58px 92px 34px;
+  border-bottom: 1px solid var(--border);
+}
+.import-row input {
+  min-width: 0; width: 100%; border: 1px solid transparent; border-radius: 8px;
+  padding: 6px 4px; font-size: 12.5px; background: transparent; font-family: var(--font);
+}
+.import-row input:focus { outline: none; border-color: var(--violet2); background: var(--card); }
+.import-head { position: sticky; top: 0; background: var(--surface2); z-index: 1; font-size: 13px; text-align: center; }
