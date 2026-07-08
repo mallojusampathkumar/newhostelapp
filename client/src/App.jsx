@@ -5,6 +5,7 @@ import Landing from './pages/Landing.jsx';
 import Auth from './pages/Auth.jsx';
 import Shell from './pages/Shell.jsx';
 import Portal from './pages/Portal.jsx';
+import Blocked from './pages/Blocked.jsx';
 
 /* toast system, shared app-wide */
 const ToastContext = createContext(() => {});
@@ -43,6 +44,15 @@ function Root() {
       .catch(() => { setToken(null); setView('landing'); });
   }, [setLang, portalToken]);
 
+  // account blocked / approval revoked mid-session → re-check and lock the UI
+  useEffect(() => {
+    const h = () => {
+      get('/me').then(({ user }) => setUser(user)).catch(() => {});
+    };
+    window.addEventListener('ss-access', h);
+    return () => window.removeEventListener('ss-access', h);
+  }, []);
+
   const onAuthed = (u, token) => {
     setToken(token);
     setUser(u);
@@ -62,7 +72,12 @@ function Root() {
       {(view === 'login' || view === 'signup') && (
         <Auth mode={view} onAuthed={onAuthed} onSwitch={m => setView(m)} onBack={() => setView('landing')} />
       )}
-      {view === 'app' && <Shell user={user} setUser={setUser} onLogout={logout} />}
+      {view === 'app' && user && ['blocked', 'pending', 'rejected'].includes(user.access?.status) && (
+        <Blocked user={user} onRecheck={() => get('/me').then(({ user: u }) => setUser(u)).catch(() => {})} onLogout={logout} />
+      )}
+      {view === 'app' && user && !['blocked', 'pending', 'rejected'].includes(user.access?.status) && (
+        <Shell user={user} setUser={setUser} onLogout={logout} />
+      )}
       <Toasts items={toasts} />
     </ToastContext.Provider>
   );

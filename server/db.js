@@ -20,6 +20,9 @@ const EMPTY = {
   staff: [],
   meters: [],
   activities: [],
+  notifications: [],
+  paymentClaims: [],
+  settings: { autoApprove: true, trialDays: 30 },
   secret: null
 };
 

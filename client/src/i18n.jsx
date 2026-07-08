@@ -120,7 +120,61 @@ const T = {
     // more
     editProfile: 'Edit Profile', profileSaved: 'Profile saved ✔',
     // home
-    tapForDetails: 'Tap for details'
+    tapForDetails: 'Tap for details',
+    // partial payments / dues
+    previousDues: 'Previous dues', currentMonth: 'This month', stillPending: 'Still pending',
+    oldBalance: 'Old balance', partialPaid: 'Partly paid', dueStatus: 'Due',
+    amountReceived: 'Amount received', clearsOldFirst: 'Money clears oldest dues first',
+    afterThisPayment: 'After this payment', allClearAfter: 'All clear after this payment 🎉',
+    fullDue: 'Full due', oldDuesOnly: 'Old dues', oneMonth: '1 month', collectAdvance: 'Collect Advance',
+    advance: 'Advance', maintenanceLabel: 'Maintenance (₹/month)', rentStatement: 'Statement',
+    printReceipt: 'Print / PDF', leaveDate: 'Leave date (notice)', setLeaveDate: 'Set leave date',
+    walletCredit: 'Extra paid (credit)',
+    // KYC
+    kyc: 'KYC', kycTitle: 'KYC Documents', kycPendingNote: 'No ID proof uploaded yet — KYC is done only after a document is uploaded',
+    kycSubmitted: 'Uploaded — verify', kycVerified: 'KYC Verified', kycRejected: 'Rejected',
+    uploadDoc: 'Upload document', docType: 'Document type', idNumber: 'ID number',
+    aadhaarDoc: 'Aadhaar', panDoc: 'PAN', passportDoc: 'Passport', dlDoc: 'Driving License', voterDoc: 'Voter ID', otherDoc: 'Other',
+    verifyKyc: 'Mark Verified', rejectKyc: 'Reject', sendKycLink: 'Send KYC link',
+    kycLinkMsg: 'Please upload your ID proof (Aadhaar / PAN / any KYC document) using your personal portal link:',
+    kycUploadedBy: 'Uploaded by', kycExport: 'Export KYC records', kycRecords: 'KYC Records',
+    myKyc: 'My KYC', kycUploadHint: 'Upload a clear photo of your Aadhaar card or any ID proof. Your owner will verify it.',
+    maxDocs: 'Maximum 3 documents',
+    // smart import
+    smartImport: 'Smart Import', smartImportSub: 'Bring your existing register in one go — Excel, CSV or a photo',
+    chooseFile: 'Choose Excel / CSV', choosePhoto: 'Scan photo (OCR)', importPreview: 'Check & edit before saving',
+    importRows: 'rows found', importNow: 'Import all', importDone: 'Import complete!',
+    importHint: 'Columns understood: room, bed, name, phone, rent, advance, due, join date, floor',
+    scanning: 'Reading the photo… this can take a moment', noRowsFound: 'Could not detect rows — try an Excel/CSV file',
+    downloadTemplate: 'Download template',
+    // setup wizard
+    setupWizard: 'Setup Wizard', setupWelcome: "Let's set up your property in 4 quick steps",
+    stepName: 'Property name', stepFloors: 'Floors', stepRooms: 'Rooms & beds', stepReview: 'Review & create',
+    roomsPerFloor: 'Rooms per floor', bedsPerRoom: 'Beds per room (default)', defaultRent: 'Rent per bed (₹/month)',
+    roomNumbersAuto: 'Room numbers are generated automatically (G01, 101, 102…)',
+    createProperty: 'Create my property', wizardDone: 'Your property is ready!',
+    next: 'Next', previous: 'Back', skipForNow: 'Skip for now',
+    // notifications
+    inbox: 'Inbox', markAllRead: 'Mark all read', noNotifications: 'Nothing new — all caught up!',
+    paymentClaims: 'Tenant payment requests', recordThis: 'Record payment', dismiss: 'Dismiss', viewProof: 'View proof',
+    // analytics
+    analytics: 'Analytics', occupancyRate: 'Occupancy', rentCollection: 'Rent Collection',
+    revenueTrend: 'Revenue Trend', floorWise: 'Floor-wise', collectedLabel: 'Collected', pendingLabel: 'Pending',
+    activeTenants: 'Active tenants', totalPendingDues: 'Total pending dues',
+    // admin
+    adminPanel: 'Admin', adminUsers: 'Owners', adminStats: 'Usage', approve: 'Approve', reject: 'Reject',
+    block: 'Block', unblock: 'Unblock', upgradePlan: 'Upgrade to Premium', downgradePlan: 'Move to Free',
+    extendTrial: '+30 days trial', resetPassword: 'Reset password', deleteUser: 'Delete user',
+    autoApprove: 'Auto-approve new signups', trialDaysLabel: 'Free trial days',
+    signupsPerMonth: 'Signups per month', lastActive: 'Last active',
+    // blocked / readonly
+    blockedTitle: 'Account locked', pendingTitle: 'Waiting for approval',
+    blockedMsg: 'Your account has been blocked. Please contact support to restore access.',
+    pendingMsg: 'Your account is under review. You will be able to use StaySathi once an admin approves it.',
+    readonlyBanner: 'Trial ended — read-only mode. Upgrade to keep managing your property.',
+    contactSupport: 'Contact support', checkAgain: 'Check again',
+    // misc
+    uploadScreenshot: 'Attach UPI screenshot (optional)', joined: 'Joined', share: 'Share'
   },
 
   /* ---------- Hindi ---------- */

@@ -9,11 +9,14 @@ const CMP_CATS = [['plumbing', '🚰'], ['electrical', '⚡'], ['food', '🍛'],
 export default function Alerts({ overview, refreshOverview }) {
   const { t } = useLang();
   const toast = useToast();
-  const [seg, setSeg] = useState('complaints'); // complaints | notices | activity
+  const [seg, setSeg] = useState('inbox'); // inbox | complaints | notices | activity
   const [propId, setPropId] = useState('');
   const [complaints, setComplaints] = useState(null);
   const [notices, setNotices] = useState(null);
   const [activities, setActivities] = useState(null);
+  const [notifications, setNotifications] = useState(null);
+  const [claims, setClaims] = useState(null);
+  const [proof, setProof] = useState(null);
   const [modal, setModal] = useState(null);
 
   const properties = overview?.properties || [];
@@ -22,8 +25,32 @@ export default function Alerts({ overview, refreshOverview }) {
     get(`/complaints${propId ? `?propertyId=${propId}` : ''}`).then(d => setComplaints(d.complaints)).catch(() => {});
     get('/notices').then(d => setNotices(d.notices)).catch(() => {});
     get('/activities').then(d => setActivities(d.activities)).catch(() => {});
+    get('/notifications').then(d => setNotifications(d.notifications)).catch(() => {});
+    get('/payment-claims').then(d => setClaims(d.claims)).catch(() => {});
   }, [propId]);
   useEffect(() => { load(); }, [load]);
+
+  const markRead = async (ids) => {
+    try { await post('/notifications/read', ids ? { ids } : {}); load(); refreshOverview(); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+
+  const recordClaim = async (c) => {
+    try {
+      await post('/payments', { tenantId: c.tenantId, amount: c.amount, mode: 'upi', note: c.note || 'Tenant claim' });
+      await post(`/payment-claims/${c.id}/resolve`, { accept: true });
+      toast(t('rentRecorded'));
+      load(); refreshOverview();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  const dismissClaim = async (c) => {
+    try { await post(`/payment-claims/${c.id}/resolve`, { accept: false }); load(); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+
+  const unread = (notifications || []).filter(n => !n.read);
+  const openClaims = (claims || []).filter(c => c.status === 'open' && (!propId || c.propertyId === propId));
+  const shownNotifications = (notifications || []).filter(n => !propId || !n.propertyId || n.propertyId === propId);
 
   const setStatus = async (c, status) => {
     try { await put(`/complaints/${c.id}`, { status }); load(); refreshOverview(); }
@@ -46,10 +73,63 @@ export default function Alerts({ overview, refreshOverview }) {
       </div>
 
       <div className="seg mt8">
+        <button className={seg === 'inbox' ? 'active' : ''} onClick={() => setSeg('inbox')}>
+          📥 {t('inbox')}{unread.length > 0 ? ` (${unread.length})` : ''}
+        </button>
         <button className={seg === 'complaints' ? 'active' : ''} onClick={() => setSeg('complaints')}>🛠️ {t('complaints')}</button>
         <button className={seg === 'notices' ? 'active' : ''} onClick={() => setSeg('notices')}>📢 {t('notices')}</button>
         <button className={seg === 'activity' ? 'active' : ''} onClick={() => setSeg('activity')}>🕓 {t('activity')}</button>
       </div>
+
+      {/* -------- inbox: notifications + tenant payment requests -------- */}
+      {seg === 'inbox' && (
+        <div className="mt16">
+          {openClaims.length > 0 && (
+            <>
+              <b className="small">💸 {t('paymentClaims')}</b>
+              {openClaims.map(c => (
+                <div key={c.id} className="list-item mt8" style={{ alignItems: 'flex-start' }}>
+                  <div className="avatar" style={{ background: 'linear-gradient(135deg,#0984e3,#74b9ff)' }}>💸</div>
+                  <div className="grow">
+                    <b>{c.tenantName}</b> <b style={{ color: 'var(--green2)' }}>₹{Number(c.amount).toLocaleString('en-IN')}</b>
+                    <div className="muted small">{new Date(c.createdAt).toLocaleString()}{c.note ? ` · ${c.note}` : ''}</div>
+                    <div className="row wrap mt8">
+                      <button className="btn btn-sm btn-green" onClick={() => recordClaim(c)}>✅ {t('recordThis')}</button>
+                      {c.screenshot && <button className="btn btn-sm" onClick={() => setProof(c.screenshot)}>🖼️ {t('viewProof')}</button>}
+                      <button className="btn btn-sm btn-ghost" onClick={() => dismissClaim(c)}>✖ {t('dismiss')}</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className="mb16" />
+            </>
+          )}
+
+          <div className="row spread">
+            <span className="chip">📥 {shownNotifications.length}</span>
+            {unread.length > 0 && <button className="btn btn-sm" onClick={() => markRead(null)}>✔ {t('markAllRead')}</button>}
+          </div>
+          {notifications && shownNotifications.length === 0 && <Empty icon="🎉" text={t('noNotifications')} />}
+          {shownNotifications.map(n => (
+            <div key={n.id} className="list-item mt8 tap" style={{ opacity: n.read ? 0.62 : 1 }}
+              onClick={() => !n.read && markRead([n.id])}>
+              <div className="avatar" style={{ background: n.read ? 'var(--surface2)' : 'linear-gradient(135deg,#6c5ce7,#8e7bff)', color: n.read ? 'var(--text)' : '#fff' }}>{n.icon}</div>
+              <div className="grow">
+                <div className="small" style={{ fontWeight: n.read ? 400 : 700 }}>{n.text}</div>
+                <div className="muted small">{new Date(n.createdAt).toLocaleString()}</div>
+              </div>
+              {!n.read && <span className="badge" style={{ position: 'static' }}>●</span>}
+            </div>
+          ))}
+          {proof && (
+            <div className="modal-backdrop" style={{ zIndex: 60 }} onClick={() => setProof(null)}>
+              <div style={{ maxWidth: 420, margin: '10vh auto', padding: 16 }}>
+                <img src={proof} alt="payment proof" style={{ width: '100%', borderRadius: 16 }} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {seg === 'complaints' && (
         <>
