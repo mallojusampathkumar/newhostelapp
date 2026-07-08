@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { get, post, del } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
+import TenantSheet from '../components/TenantSheet.jsx';
 import { useToast } from '../App.jsx';
 
 const EXPENSE_CATS = [
@@ -9,16 +10,26 @@ const EXPENSE_CATS = [
   ['maintenance', '🔧'], ['wifi', '📶'], ['salary', '👛'], ['other', '📦']
 ];
 
-export default function Money({ overview, refreshOverview }) {
+function downloadCsv(filename, rows) {
+  const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+export default function Money({ overview, refreshOverview, initialSeg }) {
   const { t } = useLang();
   const toast = useToast();
-  const [seg, setSeg] = useState('dues'); // dues | payments | expenses | report
+  const [seg, setSeg] = useState(initialSeg || 'dues'); // dues | payments | expenses | report
   const [propId, setPropId] = useState('');
   const [dues, setDues] = useState(null);
   const [payments, setPayments] = useState(null);
   const [expenses, setExpenses] = useState(null);
   const [report, setReport] = useState(null);
   const [modal, setModal] = useState(null);
+  const [sheetTenant, setSheetTenant] = useState(null);
 
   const q = propId ? `?propertyId=${propId}` : '';
   const load = useCallback(() => {
@@ -32,33 +43,45 @@ export default function Money({ overview, refreshOverview }) {
   const totals = overview?.totals;
   const properties = overview?.properties || [];
 
-  const remind = async (row) => {
-    try {
-      const { text, phone } = await get(`/tenants/${row.tenant.id}/reminder`);
-      window.open(`https://wa.me/91${String(phone).replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(text)}`, '_blank');
-    } catch (e) { toast(e.message, 'err'); }
+  const openTenant = (row) => {
+    setSheetTenant({ ...row.tenant, dues: row.dues, propertyName: row.propertyName, roomName: row.roomName });
   };
+
+  const collected = propId ? properties.find(p => p.id === propId)?.stats.collectedThisMonth : totals?.collectedThisMonth;
+  const totalDue = dues?.reduce((a, d) => a + d.dues.dueAmount, 0) || 0;
+  const rate = (collected || 0) + totalDue > 0 ? Math.round((collected || 0) / ((collected || 0) + totalDue) * 100) : 100;
 
   const thisMonthExp = (expenses || []).filter(e => (e.date || '').startsWith(new Date().toISOString().slice(0, 7)))
     .reduce((a, e) => a + Number(e.amount), 0);
+
+  const exportPayments = () => downloadCsv('staysathi-payments.csv', [
+    ['Date', 'Tenant', 'Amount', 'Mode', 'Months', 'Receipt'],
+    ...(payments || []).map(p => [p.date, p.tenantName, p.amount, p.mode, (p.months || []).join(' '), p.receiptNo])
+  ]);
+  const exportExpenses = () => downloadCsv('staysathi-expenses.csv', [
+    ['Date', 'Category', 'Amount', 'Note'],
+    ...(expenses || []).map(e => [e.date, e.category, e.amount, e.note])
+  ]);
 
   return (
     <div className="page">
       <h2 className="title">💰 {t('navMoney')}</h2>
 
-      <select className="input mt8" value={propId} onChange={e => setPropId(e.target.value)}>
-        <option value="">🏠 {t('allProperties')}</option>
-        {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
-      </select>
+      <div className="filter-bar">
+        <select className="input" value={propId} onChange={e => setPropId(e.target.value)}>
+          <option value="">🏠 {t('allProperties')}</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+        </select>
+      </div>
 
       <div className="money-hero mt16">
-        <div className="money-tile gain">
+        <div className="money-tile gain tap" onClick={() => setSeg('payments')}>
           <div className="muted small">✅ {t('collected')} · {t('thisMonth')}</div>
-          <div className="amt">{rupee(propId ? properties.find(p => p.id === propId)?.stats.collectedThisMonth : totals?.collectedThisMonth)}</div>
+          <div className="amt">{rupee(collected)}</div>
         </div>
-        <div className="money-tile loss">
+        <div className="money-tile loss tap" onClick={() => setSeg('dues')}>
           <div className="muted small">⚠️ {t('duesTitle')}</div>
-          <div className="amt">{rupee(dues?.reduce((a, d) => a + d.dues.dueAmount, 0) || 0)}</div>
+          <div className="amt">{rupee(totalDue)}</div>
         </div>
       </div>
 
@@ -68,20 +91,21 @@ export default function Money({ overview, refreshOverview }) {
         ))}
       </div>
 
-      {/* -------- dues -------- */}
+      {/* -------- dues: every row opens the tenant directly -------- */}
       {seg === 'dues' && (
         <div className="mt16">
+          {dues && dues.length > 0 && <p className="muted small mb16">👆 {t('tapToCollect')}</p>}
           {dues && dues.length === 0 && <Empty icon="🎉" text={t('noDues')} />}
           {(dues || []).map(row => (
-            <div key={row.tenant.id} className="list-item">
+            <div key={row.tenant.id} className="list-item tap" onClick={() => openTenant(row)}>
               <div className="avatar">{row.tenant.name[0]}</div>
               <div className="grow">
                 <b>{row.tenant.name}</b>
                 <div className="muted small">{row.propertyName} · {t('room')} {row.roomName} · {row.dues.unpaidMonths.length} {t('months')}</div>
               </div>
               <div className="center">
-                <div style={{ color: '#ffb3af', fontWeight: 800 }}>{rupee(row.dues.dueAmount)}</div>
-                <button className="btn btn-sm btn-green mt8" onClick={() => remind(row)}>📲 {t('remind')}</button>
+                <div className="due-amt">{rupee(row.dues.dueAmount)}</div>
+                <button className="btn btn-sm btn-green mt8" onClick={(e) => { e.stopPropagation(); openTenant(row); }}>💰 {t('collect')}</button>
               </div>
             </div>
           ))}
@@ -91,15 +115,25 @@ export default function Money({ overview, refreshOverview }) {
       {/* -------- payments -------- */}
       {seg === 'payments' && (
         <div className="mt16">
+          <div className="row spread mb16">
+            <span className="chip green">🧾 {(payments || []).length}</span>
+            <button className="btn btn-sm" onClick={exportPayments}>⬇️ {t('exportCsv')}</button>
+          </div>
           {payments && payments.length === 0 && <Empty icon="🧾" text="—" />}
           {(payments || []).map(p => (
             <div key={p.id} className="list-item">
-              <div className="avatar" style={{ background: 'linear-gradient(135deg,#00b894,#00cec9)' }}>₹</div>
+              <div className="avatar" style={{ background: 'linear-gradient(135deg,#0ea97f,#2fd3a5)' }}>₹</div>
               <div className="grow">
                 <b>{p.tenantName}</b>
                 <div className="muted small">{p.date} · {p.mode.toUpperCase()} · {t('receipt')} {p.receiptNo}</div>
               </div>
-              <b style={{ color: 'var(--green2)' }}>{rupee(p.amount)}</b>
+              <div className="center">
+                <b style={{ color: 'var(--green2)' }}>{rupee(p.amount)}</b>
+                <button className="btn btn-sm btn-ghost" title={t('shareReceipt')} onClick={() => {
+                  const text = `🧾 ${t('receipt')} ${p.receiptNo}\n${p.tenantName}\n${t('amount')}: ₹${p.amount}\n${t('date')}: ${p.date} · ${p.mode.toUpperCase()}\n— StaySathi`;
+                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                }}>📤</button>
+              </div>
             </div>
           ))}
         </div>
@@ -110,13 +144,17 @@ export default function Money({ overview, refreshOverview }) {
         <div className="mt16">
           <div className="row spread mb16">
             <span className="chip orange">🛒 {t('thisMonth')}: {rupee(thisMonthExp)}</span>
-            <button className="btn btn-sm btn-primary" onClick={() => setModal('addExpense')}>➕ {t('addExpense')}</button>
+            <div className="row">
+              <button className="btn btn-sm" onClick={exportExpenses}>⬇️ {t('exportCsv')}</button>
+              <button className="btn btn-sm btn-primary" onClick={() => setModal('addExpense')}>➕ {t('addExpense')}</button>
+            </div>
           </div>
+          {expenses && expenses.length === 0 && <Empty icon="🛒" text="—" />}
           {(expenses || []).map(e => {
             const ico = EXPENSE_CATS.find(c => c[0] === e.category)?.[1] || '📦';
             return (
               <div key={e.id} className="list-item">
-                <div className="avatar" style={{ background: 'linear-gradient(135deg,#f39c12,#fdaa3d)' }}>{ico}</div>
+                <div className="avatar" style={{ background: 'linear-gradient(135deg,#f59f00,#ffc14d)' }}>{ico}</div>
                 <div className="grow">
                   <b>{t(e.category)}</b>
                   <div className="muted small">{e.date}{e.note ? ` · ${e.note}` : ''}</div>
@@ -133,27 +171,58 @@ export default function Money({ overview, refreshOverview }) {
 
       {/* -------- report -------- */}
       {seg === 'report' && report && (
-        <div className="card mt16">
-          <b>📊 {t('incomeVsExpense')}</b>
-          <BarChart series={report.series} />
-          <div className="row wrap mt8">
-            <span className="chip green">■ {t('income')}</span>
-            <span className="chip red">■ {t('expenses')}</span>
+        <>
+          <div className="card mt16">
+            <div className="row spread">
+              <b>🎯 {t('collectionRate')} · {t('thisMonth')}</b>
+              <b style={{ color: rate >= 80 ? 'var(--green2)' : rate >= 50 ? 'var(--gold)' : '#c53030' }}>{rate}%</b>
+            </div>
+            <div className="progress mt8"><div style={{ width: `${rate}%` }} /></div>
+            <div className="row spread mt8 small muted">
+              <span>✅ {rupee(collected)}</span>
+              <span>⚠️ {rupee(totalDue)}</span>
+            </div>
           </div>
-          <div className="mt16">
-            {report.series.slice(-1).map(s => (
-              <div key={s.month} className="row spread">
-                <span className="muted">{t('profit')} · {t('thisMonth')}</span>
-                <b style={{ color: s.profit >= 0 ? 'var(--green2)' : '#ffb3af', fontSize: 20 }}>{rupee(s.profit)}</b>
+
+          <div className="card mt16">
+            <b>📊 {t('incomeVsExpense')}</b>
+            <BarChart series={report.series} />
+            <div className="row wrap mt8">
+              <span className="chip green">■ {t('income')}</span>
+              <span className="chip red">■ {t('expenses')}</span>
+            </div>
+            <div className="mt16">
+              {report.series.slice(-1).map(s => (
+                <div key={s.month} className="row spread">
+                  <span className="muted">{t('netProfit')} · {t('thisMonth')}</span>
+                  <b style={{ color: s.profit >= 0 ? 'var(--green2)' : '#c53030', fontSize: 20 }}>{rupee(s.profit)}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {Object.keys(report.expenseByCategory || {}).length > 0 && (
+            <div className="card mt16">
+              <b>🛒 {t('byCategory')}</b>
+              <div className="row wrap mt16">
+                {Object.entries(report.expenseByCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => {
+                  const ico = EXPENSE_CATS.find(c => c[0] === cat)?.[1] || '📦';
+                  return <span key={cat} className="chip orange">{ico} {t(cat)}: {rupee(amt)}</span>;
+                })}
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {modal === 'addExpense' && (
         <AddExpenseModal properties={properties} defaultProp={propId || properties[0]?.id}
           onDone={() => { setModal(null); load(); refreshOverview(); }} onClose={() => setModal(null)} />
+      )}
+      {sheetTenant && (
+        <TenantSheet tenant={sheetTenant}
+          onChanged={async () => { load(); refreshOverview(); }}
+          onClose={() => setSheetTenant(null)} />
       )}
     </div>
   );

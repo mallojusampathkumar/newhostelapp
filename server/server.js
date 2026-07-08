@@ -67,6 +67,13 @@ function logActivity(ownerId, propertyId, icon, text) {
   if (db.activities.length > 500) db.activities.length = 500;
   store.save();
 }
+function ensurePortalToken(tenant) {
+  if (!tenant.portalToken) {
+    tenant.portalToken = crypto.randomBytes(12).toString('base64url');
+    store.save();
+  }
+  return tenant.portalToken;
+}
 
 /* ---------------- dues engine ---------------- */
 // A tenant owes rent for every month from their join month up to the current
@@ -285,7 +292,11 @@ app.get('/api/properties/:id/tree', auth, (req, res) => {
         if (tenant) dues = tenantDues(tenant);
         return {
           ...bed,
-          tenant: tenant ? { id: tenant.id, name: tenant.name, phone: tenant.phone, rent: tenant.rent, joinDate: tenant.joinDate, photo: tenant.photo || null, dues } : null
+          tenant: tenant ? {
+            id: tenant.id, name: tenant.name, phone: tenant.phone, rent: tenant.rent,
+            deposit: tenant.deposit, joinDate: tenant.joinDate, occupation: tenant.occupation,
+            kycStatus: tenant.kycStatus, photo: tenant.photo || null, dues
+          } : null
         };
       });
       const occupied = beds.filter(b => b.tenant).length;
@@ -403,6 +414,7 @@ app.post('/api/beds/:id/assign', auth, (req, res) => {
     notes: notes || '',
     kycStatus: aadhaar ? 'submitted' : 'pending',
     status: 'active',
+    portalToken: crypto.randomBytes(12).toString('base64url'),
     createdAt: new Date().toISOString()
   };
   db.tenants.push(tenant);
@@ -508,6 +520,7 @@ app.get('/api/payments', auth, (req, res) => {
   const myProps = new Set(db.properties.filter(p => p.ownerId === req.user.id).map(p => p.id));
   let list = db.payments.filter(p => myProps.has(p.propertyId));
   if (req.query.propertyId) list = list.filter(p => p.propertyId === req.query.propertyId);
+  if (req.query.tenantId) list = list.filter(p => p.tenantId === req.query.tenantId);
   if (req.query.month) list = list.filter(p => (p.date || '').startsWith(req.query.month));
   list = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   res.json({ payments: list.slice(0, 300) });
@@ -539,6 +552,83 @@ app.get('/api/tenants/:id/reminder', auth, (req, res) => {
   const text = `Namaste ${tenant.name} 🙏\nThis is a friendly rent reminder from ${prop.name}.\nPending: ₹${d.dueAmount} (${d.unpaidMonths.join(', ')})\nPlease pay at your earliest convenience. Thank you!\n— ${req.user.name}, StaySathi`;
   logActivity(req.user.id, prop.id, '🔔', `Rent reminder sent to ${tenant.name}`);
   res.json({ text, phone: tenant.phone, dueAmount: d.dueAmount });
+});
+
+/* ---------------- tenant portal (public, token-based) ---------------- */
+
+// owner generates / fetches the share link for a tenant
+app.get('/api/tenants/:id/portal-link', auth, (req, res) => {
+  const tenant = db.tenants.find(t => t.id === req.params.id);
+  const prop = tenant && db.properties.find(p => p.id === tenant.propertyId && p.ownerId === req.user.id);
+  if (!prop) return res.status(404).json({ error: 'Tenant not found' });
+  const token = ensurePortalToken(tenant);
+  res.json({ token, path: `/portal/${token}`, phone: tenant.phone });
+});
+
+function portalTenant(req, res) {
+  const tenant = db.tenants.find(t => t.portalToken && t.portalToken === req.params.token);
+  if (!tenant || tenant.status !== 'active') {
+    res.status(404).json({ error: 'This link is no longer active. Ask your owner for a new one.' });
+    return null;
+  }
+  return tenant;
+}
+
+app.get('/api/portal/:token', (req, res) => {
+  const tenant = portalTenant(req, res); if (!tenant) return;
+  const prop = db.properties.find(p => p.id === tenant.propertyId);
+  const owner = prop && db.users.find(u => u.id === prop.ownerId);
+  const room = db.rooms.find(r => r.id === tenant.roomId);
+  const dues = tenantDues(tenant);
+  const payments = db.payments.filter(p => p.tenantId === tenant.id)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 60);
+  const notices = db.notices
+    .filter(n => n.ownerId === prop?.ownerId && (!n.propertyId || n.propertyId === tenant.propertyId))
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).slice(0, 20);
+  const complaints = db.complaints.filter(c => c.tenantId === tenant.id)
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  res.json({
+    tenant: {
+      name: tenant.name, phone: tenant.phone, rent: tenant.rent, deposit: tenant.deposit,
+      joinDate: tenant.joinDate, kycStatus: tenant.kycStatus
+    },
+    property: prop ? { name: prop.name, icon: prop.icon, city: prop.city, type: prop.type } : null,
+    owner: owner ? { name: owner.name, phone: owner.phone } : null,
+    roomName: room?.name || '', dues, payments, notices, complaints
+  });
+});
+
+app.post('/api/portal/:token/complaints', (req, res) => {
+  const tenant = portalTenant(req, res); if (!tenant) return;
+  const { category, text } = req.body || {};
+  if (!text) return res.status(400).json({ error: 'Describe the complaint' });
+  const prop = db.properties.find(p => p.id === tenant.propertyId);
+  const room = db.rooms.find(r => r.id === tenant.roomId);
+  const complaint = {
+    id: store.id('cmp'), propertyId: tenant.propertyId, tenantId: tenant.id,
+    category: category || 'other', text: String(text).slice(0, 1000),
+    tenantName: tenant.name, roomName: room?.name || '',
+    status: 'open', source: 'portal', createdAt: new Date().toISOString()
+  };
+  db.complaints.push(complaint);
+  if (prop) logActivity(prop.ownerId, prop.id, '🛠️', `${tenant.name} raised a complaint (${complaint.category}) at ${prop.name}`);
+  store.saveNow();
+  res.json({ complaint });
+});
+
+// tenant says "I have paid" → owner sees it in the activity feed and can record it
+app.post('/api/portal/:token/paid-claim', (req, res) => {
+  const tenant = portalTenant(req, res); if (!tenant) return;
+  const prop = db.properties.find(p => p.id === tenant.propertyId);
+  const amount = Number(req.body?.amount) || 0;
+  const note = String(req.body?.note || '').slice(0, 200);
+  if (amount <= 0) return res.status(400).json({ error: 'Enter the amount you paid' });
+  if (prop) {
+    logActivity(prop.ownerId, prop.id, '💸',
+      `${tenant.name} says they paid ₹${amount}${note ? ` (${note})` : ''} — verify & record it`);
+  }
+  store.saveNow();
+  res.json({ ok: true });
 });
 
 /* ---------------- expenses ---------------- */
@@ -814,7 +904,8 @@ function seedDemo() {
               name: tn, phone: tp, rent: def.rent, deposit: def.rent, joinDate: monthsAgo(joinedMonths),
               occupation: ['Student', 'Software Engineer', 'Shop Owner', 'Nurse'][ti % 4],
               aadhaar: '', photo: null, notes: '', kycStatus: ti % 3 === 0 ? 'pending' : 'verified',
-              status: 'active', createdAt: new Date().toISOString()
+              status: 'active', portalToken: crypto.randomBytes(12).toString('base64url'),
+              createdAt: new Date().toISOString()
             };
             db.tenants.push(tenant);
             bed.tenantId = tenant.id;

@@ -4,6 +4,7 @@ import { get, setToken, getToken } from './api.js';
 import Landing from './pages/Landing.jsx';
 import Auth from './pages/Auth.jsx';
 import Shell from './pages/Shell.jsx';
+import Portal from './pages/Portal.jsx';
 
 /* toast system, shared app-wide */
 const ToastContext = createContext(() => {});
@@ -19,9 +20,14 @@ function Toasts({ items }) {
 
 function Root() {
   const [user, setUser] = useState(null);
-  const [view, setView] = useState('boot'); // boot | landing | login | signup | app
+  const [view, setView] = useState('boot'); // boot | landing | login | signup | app | portal
   const [toasts, setToasts] = useState([]);
   const { setLang } = useLang();
+
+  // public tenant portal — /portal/<token> works without login
+  const portalToken = window.location.pathname.startsWith('/portal/')
+    ? window.location.pathname.split('/portal/')[1]?.split('/')[0]
+    : null;
 
   const toast = useCallback((msg, kind = 'ok') => {
     const id = Math.random().toString(36).slice(2);
@@ -30,11 +36,12 @@ function Root() {
   }, []);
 
   useEffect(() => {
+    if (portalToken) { setView('portal'); return; }
     if (!getToken()) { setView('landing'); return; }
     get('/me')
       .then(({ user }) => { setUser(user); if (user.language) setLang(user.language); setView('app'); })
       .catch(() => { setToken(null); setView('landing'); });
-  }, [setLang]);
+  }, [setLang, portalToken]);
 
   const onAuthed = (u, token) => {
     setToken(token);
@@ -50,6 +57,7 @@ function Root() {
 
   return (
     <ToastContext.Provider value={toast}>
+      {view === 'portal' && <Portal token={portalToken} />}
       {view === 'landing' && <Landing onLogin={() => setView('login')} onSignup={() => setView('signup')} />}
       {(view === 'login' || view === 'signup') && (
         <Auth mode={view} onAuthed={onAuthed} onSwitch={m => setView(m)} onBack={() => setView('landing')} />
