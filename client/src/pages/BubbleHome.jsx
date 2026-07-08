@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { get, post, put } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, rupee } from '../components/ui.jsx';
+import TenantSheet from '../components/TenantSheet.jsx';
 import { useToast } from '../App.jsx';
 
 /* The bubble navigator:
@@ -10,7 +11,7 @@ import { useToast } from '../App.jsx';
 const PROP_ICONS = ['🏨', '🏡', '🏢', '🏬', '🏘️', '🛖'];
 const PROP_COLORS = ['#6C5CE7', '#00B894', '#E17055', '#0984E3', '#E84393', '#F39C12'];
 
-export default function BubbleHome({ overview, refreshOverview }) {
+export default function BubbleHome({ overview, refreshOverview, go }) {
   const { t } = useLang();
   const toast = useToast();
 
@@ -105,10 +106,10 @@ export default function BubbleHome({ overview, refreshOverview }) {
             </div>
             {totals && (
               <div className="stat-strip">
-                <div className="stat-tile"><div className="v">🏠 {totals.properties}</div><div className="k">{t('properties')}</div></div>
-                <div className="stat-tile"><div className="v">🛏️ {totals.occupied}/{totals.beds}</div><div className="k">{t('occupancy')}</div></div>
-                <div className="stat-tile"><div className="v" style={{ color: 'var(--green2)' }}>{rupee(totals.collectedThisMonth)}</div><div className="k">{t('collected')}</div></div>
-                <div className="stat-tile"><div className="v" style={{ color: totals.dueAmount ? '#ffb3af' : 'var(--green2)' }}>{rupee(totals.dueAmount)}</div><div className="k">{t('rentDue')}</div></div>
+                <div className="stat-tile tap" onClick={() => setLevel('props')}><div className="v">🏠 {totals.properties}</div><div className="k">{t('properties')}</div></div>
+                <div className="stat-tile tap" onClick={() => go && go('people')}><div className="v">🛏️ {totals.occupied}/{totals.beds}</div><div className="k">{t('occupancy')}</div></div>
+                <div className="stat-tile tap" onClick={() => go && go('money', 'payments')}><div className="v" style={{ color: 'var(--green2)' }}>{rupee(totals.collectedThisMonth)}</div><div className="k">{t('collected')}</div></div>
+                <div className="stat-tile tap" onClick={() => go && go('money', 'dues')}><div className="v" style={{ color: totals.dueAmount ? '#c53030' : 'var(--green2)' }}>{rupee(totals.dueAmount)}</div><div className="k">{t('rentDue')}</div></div>
               </div>
             )}
           </>
@@ -218,7 +219,8 @@ export default function BubbleHome({ overview, refreshOverview }) {
         <AddTenantModal bed={modal.bed} room={room} onDone={async () => { setModal(null); await refreshAll(); toast(t('tenantAdded')); }} onClose={() => setModal(null)} />
       )}
       {modal?.kind === 'tenant' && (
-        <TenantSheet bed={modal.bed} room={room} property={tree?.property}
+        <TenantSheet
+          tenant={{ ...modal.bed.tenant, roomName: room?.name || '', propertyName: tree?.property?.name || '' }}
           onChanged={async () => { await refreshAll(); }}
           onClose={() => setModal(null)} />
       )}
@@ -426,116 +428,6 @@ function AddTenantModal({ bed, room, onDone, onClose }) {
         <button className="btn btn-green btn-block" disabled={busy}>✅ {t('save')}</button>
       </form>
     </Modal>
-  );
-}
-
-/* ================= Tenant sheet ================= */
-function TenantSheet({ bed, room, property, onChanged, onClose }) {
-  const { t } = useLang();
-  const toast = useToast();
-  const tenant = bed.tenant;
-  const [paying, setPaying] = useState(false);
-  const dues = tenant.dues || { dueAmount: 0, unpaidMonths: [] };
-
-  const remind = async () => {
-    try {
-      const { text, phone } = await get(`/tenants/${tenant.id}/reminder`);
-      const digits = String(phone).replace(/\D/g, '');
-      window.open(`https://wa.me/91${digits.slice(-10)}?text=${encodeURIComponent(text)}`, '_blank');
-    } catch (e) { toast(e.message, 'err'); }
-  };
-
-  const vacate = async () => {
-    if (!window.confirm(t('confirmVacate'))) return;
-    try {
-      await post(`/tenants/${tenant.id}/vacate`);
-      await onChanged();
-      onClose();
-    } catch (e) { toast(e.message, 'err'); }
-  };
-
-  return (
-    <Modal title={tenant.name} icon="🧑" onClose={onClose}>
-      <div className="row wrap mb16">
-        <span className="chip">🚪 {t('room')} {room?.name} · {bed.name}</span>
-        <span className="chip">💰 {rupee(tenant.rent)}/mo</span>
-        <span className={`chip ${dues.dueAmount > 0 ? 'red' : 'green'}`}>
-          {dues.dueAmount > 0 ? `⚠️ ${t('pending')} ${rupee(dues.dueAmount)}` : `✅ ${t('paid')}`}
-        </span>
-        {dues.unpaidMonths.length > 0 && <span className="chip orange">📅 {dues.unpaidMonths.join(', ')}</span>}
-      </div>
-
-      {!paying ? (
-        <>
-          <div className="row wrap">
-            <button className="btn btn-green grow" onClick={() => setPaying(true)}>💰 {t('collectRent')}</button>
-            <button className="btn grow" onClick={remind}>🔔 {t('remind')}</button>
-          </div>
-          <div className="row wrap mt8">
-            <a className="btn grow" href={`tel:${tenant.phone}`}>📞 {t('callTenant')}</a>
-            <button className="btn btn-danger grow" onClick={vacate}>👋 {t('vacate')}</button>
-          </div>
-          <p className="muted small center mt16">📱 {tenant.phone} · 📅 {t('joinDate')}: {tenant.joinDate}</p>
-        </>
-      ) : (
-        <CollectRent tenant={tenant} dues={dues}
-          onDone={async () => { await onChanged(); toast(t('rentRecorded')); onClose(); }}
-          onCancel={() => setPaying(false)} />
-      )}
-    </Modal>
-  );
-}
-
-function CollectRent({ tenant, dues, onDone, onCancel }) {
-  const { t } = useLang();
-  const toast = useToast();
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const options = dues.unpaidMonths.length ? dues.unpaidMonths : [currentMonth];
-  const [selected, setSelected] = useState(new Set(options.slice(0, 1)));
-  const [mode, setMode] = useState('upi');
-  const [amount, setAmount] = useState(String((tenant.rent || 0) * 1));
-  const [busy, setBusy] = useState(false);
-
-  const toggle = (m) => {
-    const next = new Set(selected);
-    next.has(m) ? next.delete(m) : next.add(m);
-    if (next.size === 0) next.add(m);
-    setSelected(next);
-    setAmount(String((tenant.rent || 0) * next.size));
-  };
-
-  const submit = async (e) => {
-    e.preventDefault(); setBusy(true);
-    try {
-      await post('/payments', { tenantId: tenant.id, amount: Number(amount), months: [...selected], mode });
-      onDone();
-    } catch (err) { toast(err.message, 'err'); setBusy(false); }
-  };
-
-  return (
-    <form onSubmit={submit}>
-      <Field label={`📅 ${t('forMonths')}`}>
-        <div className="row wrap">
-          {options.map(m => (
-            <button type="button" key={m} className={`chip ${selected.has(m) ? 'active' : ''}`} onClick={() => toggle(m)}>{m}</button>
-          ))}
-        </div>
-      </Field>
-      <Field label={`💰 ${t('amount')}`}>
-        <input className="input" type="number" min="1" required value={amount} onChange={e => setAmount(e.target.value)} />
-      </Field>
-      <Field label={t('payMode')}>
-        <div className="seg">
-          {[['upi', '📲 UPI'], ['cash', `💵 ${t('cash')}`], ['bank', `🏦 ${t('bank')}`]].map(([v, l]) => (
-            <button type="button" key={v} className={mode === v ? 'active' : ''} onClick={() => setMode(v)}>{l}</button>
-          ))}
-        </div>
-      </Field>
-      <div className="row">
-        <button type="button" className="btn grow" onClick={onCancel}>{t('cancel')}</button>
-        <button className="btn btn-green grow" disabled={busy}>✅ {t('save')}</button>
-      </div>
-    </form>
   );
 }
 

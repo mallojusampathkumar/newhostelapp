@@ -10,11 +10,12 @@ export default function More({ overview, user, setUser, onLogout }) {
   const [screen, setScreen] = useState('menu'); // menu | meters | tutorials
   const [meters, setMeters] = useState(null);
   const [modal, setModal] = useState(null);
+  const [propId, setPropId] = useState('');
   const properties = overview?.properties || [];
 
   const loadMeters = useCallback(() => {
-    get('/meters').then(d => setMeters(d.meters)).catch(() => {});
-  }, []);
+    get(`/meters${propId ? `?propertyId=${propId}` : ''}`).then(d => setMeters(d.meters)).catch(() => {});
+  }, [propId]);
   useEffect(() => { if (screen === 'meters') loadMeters(); }, [screen, loadMeters]);
 
   const changeLang = async (code) => {
@@ -29,8 +30,11 @@ export default function More({ overview, user, setUser, onLogout }) {
       <div className="page">
         <div className="crumbs"><button className="crumb link" onClick={() => setScreen('menu')}>← {t('back')}</button></div>
         <h2 className="title">⚡ {t('meters')}</h2>
-        <div className="row spread mt8">
-          <span />
+        <div className="filter-bar">
+          <select className="input" value={propId} onChange={e => setPropId(e.target.value)}>
+            <option value="">🏠 {t('allProperties')}</option>
+            {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+          </select>
           <button className="btn btn-sm btn-primary" onClick={() => setModal('addReading')}>➕ {t('addReading')}</button>
         </div>
         <div className="mt16">
@@ -69,6 +73,7 @@ export default function More({ overview, user, setUser, onLogout }) {
           </div>
           <span className="chip active">⭐ {user.plan === 'premium' ? t('premiumPlan') : t('freePlan')}</span>
         </div>
+        <button className="btn btn-sm btn-block mt16" onClick={() => setModal('editProfile')}>✏️ {t('editProfile')}</button>
       </div>
 
       <div className="mt16">
@@ -95,7 +100,50 @@ export default function More({ overview, user, setUser, onLogout }) {
 
       <button className="btn btn-danger btn-block mt24" onClick={onLogout}>🚪 {t('logout')}</button>
       <p className="muted small center mt16">{t('madeWith')}</p>
+
+      {modal === 'editProfile' && (
+        <EditProfileModal user={user} setUser={setUser} onClose={() => setModal(null)} />
+      )}
     </div>
+  );
+}
+
+function EditProfileModal({ user, setUser, onClose }) {
+  const { t } = useLang();
+  const toast = useToast();
+  const [f, setF] = useState({ name: user.name, email: user.email || '', businessType: user.businessType || 'hostel' });
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true);
+    try {
+      const { user: u } = await put('/me', f);
+      setUser(u);
+      toast(t('profileSaved'));
+      onClose();
+    } catch (err) { toast(err.message, 'err'); setBusy(false); }
+  };
+  return (
+    <Modal title={t('editProfile')} icon="✏️" onClose={onClose}>
+      <form onSubmit={submit}>
+        <Field label={`🙍 ${t('yourName')}`}>
+          <input className="input" required value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />
+        </Field>
+        <Field label={`✉️ ${t('email')}`}>
+          <input className="input" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />
+        </Field>
+        <Field label={`🏠 ${t('businessType')}`}>
+          <div className="type-grid">
+            {[['hostel', '🏨'], ['pg', '🏡'], ['flat', '🏢'], ['apartment', '🏬']].map(([v, ico]) => (
+              <button type="button" key={v} className={`type-tile ${f.businessType === v ? 'active' : ''}`}
+                onClick={() => setF({ ...f, businessType: v })}>
+                <span className="ico">{ico}</span>{t(v)}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <button className="btn btn-primary btn-block" disabled={busy}>✅ {t('save')}</button>
+      </form>
+    </Modal>
   );
 }
 

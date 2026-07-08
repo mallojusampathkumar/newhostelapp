@@ -2,25 +2,29 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { get, post, del } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
+import TenantSheet from '../components/TenantSheet.jsx';
 import { useToast } from '../App.jsx';
 
 const ROLES = [['cook', '🍲'], ['watchman', '💂'], ['cleaner', '🧹'], ['warden', '🧑‍🏫'], ['manager', '🧑‍💼'], ['helper', '🤝']];
 
-export default function People({ overview }) {
+export default function People({ overview, refreshOverview }) {
   const { t } = useLang();
   const [seg, setSeg] = useState('tenants'); // tenants | staff
   const [status, setStatus] = useState('active');
   const [search, setSearch] = useState('');
+  const [propId, setPropId] = useState('');
   const [tenants, setTenants] = useState(null);
   const [staff, setStaff] = useState(null);
   const [modal, setModal] = useState(null);
+  const [sheetTenant, setSheetTenant] = useState(null);
 
   const properties = overview?.properties || [];
 
+  const q = propId ? `?propertyId=${propId}` : '';
   const load = useCallback(() => {
-    get('/tenants').then(d => setTenants(d.tenants)).catch(() => {});
-    get('/staff').then(d => setStaff(d.staff)).catch(() => {});
-  }, []);
+    get(`/tenants${q}`).then(d => setTenants(d.tenants)).catch(() => {});
+    get(`/staff${q}`).then(d => setStaff(d.staff)).catch(() => {});
+  }, [q]);
   useEffect(() => { load(); }, [load]);
 
   const filtered = (tenants || [])
@@ -30,6 +34,13 @@ export default function People({ overview }) {
   return (
     <div className="page">
       <h2 className="title">👥 {t('navPeople')}</h2>
+
+      <div className="filter-bar">
+        <select className="input" value={propId} onChange={e => setPropId(e.target.value)}>
+          <option value="">🏠 {t('allProperties')}</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+        </select>
+      </div>
 
       <div className="seg mt8">
         <button className={seg === 'tenants' ? 'active' : ''} onClick={() => setSeg('tenants')}>🧑 {t('tenants')}</button>
@@ -46,7 +57,8 @@ export default function People({ overview }) {
           <div className="mt16">
             {tenants && filtered.length === 0 && <Empty icon="🧑" text={t('noTenants')} />}
             {filtered.map(x => (
-              <div key={x.id} className="list-item">
+              <div key={x.id} className={`list-item ${x.status === 'active' ? 'tap' : ''}`}
+                onClick={() => x.status === 'active' && setSheetTenant(x)}>
                 <div className="avatar">{x.name[0]}</div>
                 <div className="grow">
                   <b>{x.name}</b>
@@ -62,7 +74,7 @@ export default function People({ overview }) {
                     </span>
                   </div>
                 </div>
-                <a className="btn btn-sm" href={`tel:${x.phone}`}>📞</a>
+                <a className="btn btn-sm" href={`tel:${x.phone}`} onClick={e => e.stopPropagation()}>📞</a>
               </div>
             ))}
           </div>
@@ -99,6 +111,11 @@ export default function People({ overview }) {
 
       {modal === 'addStaff' && (
         <AddStaffModal properties={properties} onDone={() => { setModal(null); load(); }} onClose={() => setModal(null)} />
+      )}
+      {sheetTenant && (
+        <TenantSheet tenant={sheetTenant}
+          onChanged={async () => { load(); refreshOverview && refreshOverview(); }}
+          onClose={() => setSheetTenant(null)} />
       )}
     </div>
   );

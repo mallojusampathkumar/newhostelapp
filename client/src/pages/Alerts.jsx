@@ -10,6 +10,7 @@ export default function Alerts({ overview, refreshOverview }) {
   const { t } = useLang();
   const toast = useToast();
   const [seg, setSeg] = useState('complaints'); // complaints | notices | activity
+  const [propId, setPropId] = useState('');
   const [complaints, setComplaints] = useState(null);
   const [notices, setNotices] = useState(null);
   const [activities, setActivities] = useState(null);
@@ -18,10 +19,10 @@ export default function Alerts({ overview, refreshOverview }) {
   const properties = overview?.properties || [];
 
   const load = useCallback(() => {
-    get('/complaints').then(d => setComplaints(d.complaints)).catch(() => {});
+    get(`/complaints${propId ? `?propertyId=${propId}` : ''}`).then(d => setComplaints(d.complaints)).catch(() => {});
     get('/notices').then(d => setNotices(d.notices)).catch(() => {});
     get('/activities').then(d => setActivities(d.activities)).catch(() => {});
-  }, []);
+  }, [propId]);
   useEffect(() => { load(); }, [load]);
 
   const setStatus = async (c, status) => {
@@ -29,9 +30,20 @@ export default function Alerts({ overview, refreshOverview }) {
     catch (e) { toast(e.message, 'err'); }
   };
 
+  // notices/activities are filtered client-side (all-property items always show)
+  const shownNotices = (notices || []).filter(n => !propId || !n.propertyId || n.propertyId === propId);
+  const shownActivities = (activities || []).filter(a => !propId || !a.propertyId || a.propertyId === propId);
+
   return (
     <div className="page">
       <h2 className="title">🔔 {t('navAlerts')}</h2>
+
+      <div className="filter-bar">
+        <select className="input" value={propId} onChange={e => setPropId(e.target.value)}>
+          <option value="">🏠 {t('allProperties')}</option>
+          {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+        </select>
+      </div>
 
       <div className="seg mt8">
         <button className={seg === 'complaints' ? 'active' : ''} onClick={() => setSeg('complaints')}>🛠️ {t('complaints')}</button>
@@ -75,12 +87,12 @@ export default function Alerts({ overview, refreshOverview }) {
       {seg === 'notices' && (
         <>
           <div className="row spread mt16">
-            <span className="chip">📢 {(notices || []).length}</span>
+            <span className="chip">📢 {shownNotices.length}</span>
             <button className="btn btn-sm btn-primary" onClick={() => setModal('postNotice')}>➕ {t('postNotice')}</button>
           </div>
           <div className="mt16">
-            {notices && notices.length === 0 && <Empty icon="📢" text="—" />}
-            {(notices || []).map(n => (
+            {notices && shownNotices.length === 0 && <Empty icon="📢" text="—" />}
+            {shownNotices.map(n => (
               <div key={n.id} className="list-item" style={{ alignItems: 'flex-start' }}>
                 <div className="avatar" style={{ background: 'linear-gradient(135deg,#fdaa3d,#ffeaa7)', color: '#5c3c00' }}>📢</div>
                 <div className="grow">
@@ -96,9 +108,10 @@ export default function Alerts({ overview, refreshOverview }) {
 
       {seg === 'activity' && (
         <div className="mt16">
-          {(activities || []).map(a => (
+          {activities && shownActivities.length === 0 && <Empty icon="🕓" text="—" />}
+          {shownActivities.map(a => (
             <div key={a.id} className="list-item">
-              <div className="avatar" style={{ background: 'rgba(255,255,255,.12)' }}>{a.icon}</div>
+              <div className="avatar" style={{ background: 'var(--surface2)', color: 'var(--text)' }}>{a.icon}</div>
               <div className="grow">
                 <div className="small">{a.text}</div>
                 <div className="muted small">{new Date(a.createdAt).toLocaleString()}</div>

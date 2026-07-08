@@ -101,7 +101,26 @@ const T = {
     emptyFloor: 'No rooms on this floor yet. Tap + to add.',
     receipt: 'Receipt', date: 'Date', deleteQ: 'Delete?', yes: 'Yes', no: 'No',
     freePlan: 'Free Plan', premiumPlan: 'Premium Plan',
-    madeWith: 'Made with ❤️ for Indian property owners'
+    madeWith: 'Made with ❤️ for Indian property owners',
+    // tenant sheet & portal
+    collect: 'Collect', tenantPortal: 'Tenant Portal', sharePortal: 'Share Portal Link',
+    portalHint: 'Tenant can see rent due, receipts and notices, and raise complaints from this link.',
+    paymentHistory: 'Payment History', noPaymentsYet: 'No payments recorded yet',
+    editDetails: 'Edit Details', markKycDone: 'Mark KYC done', markKycPending: 'Mark KYC pending',
+    shareReceipt: 'Receipt', linkCopied: 'Link copied ✔', copyLink: 'Copy Link',
+    dueNow: 'Due now', allClear: 'All clear — no dues! 🎉',
+    iPaid: 'I have paid', iPaidHint: 'Tell your owner you already paid. They will verify and record it.',
+    claimSent: 'Owner has been notified ✔', myComplaints: 'My Complaints', raiseComplaint: 'Raise Complaint',
+    describeIssue: 'Describe the issue…', submittedOn: 'Submitted', ownerLabel: 'Owner',
+    noticeBoard: 'Notice Board', yourRoom: 'Your Room', monthlyRentLabel: 'Monthly Rent',
+    depositLabel: 'Deposit', memberSince: 'Staying since', portalExpired: 'This link is not active',
+    // money extras
+    collectionRate: 'Collection rate', exportCsv: 'Export CSV', byCategory: 'This month by category',
+    tapToCollect: 'Tap a tenant to collect or remind', totalDue: 'Total due', netProfit: 'Net profit',
+    // more
+    editProfile: 'Edit Profile', profileSaved: 'Profile saved ✔',
+    // home
+    tapForDetails: 'Tap for details'
   },
 
   /* ---------- Hindi ---------- */
