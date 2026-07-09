@@ -1,0 +1,26 @@
+# Dependencies (reinstalled inside the image)
+node_modules
+**/node_modules
+
+# Build output (regenerated in the client-build stage)
+client/dist
+
+# Local runtime data — never bake tenant data into an image
+server/data
+data
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# VCS / CI / editor noise
+.git
+.github
+.gitignore
+*.log
+.DS_Store
+
+# Docs & meta not needed at runtime
+README.md
+docs

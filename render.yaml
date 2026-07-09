@@ -1,0 +1,30 @@
+# Render Blueprint (Infrastructure as Code).
+# In the Render dashboard: New + -> Blueprint -> pick this repo.
+# Render reads this file, builds the Docker image and provisions the disk.
+services:
+  - type: web
+    name: staysathi
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter            # starter tier is required for a persistent disk
+    region: singapore        # closest region for India-based users
+    branch: main
+    healthCheckPath: /health
+    autoDeploy: true         # deploy on every push to `branch`
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5050"
+      - key: DATA_DIR
+        value: /data
+      - key: APP_VERSION
+        sync: false          # set per-deploy or leave unset
+      - key: ADMIN_PHONE
+        sync: false          # set in the dashboard (secret)
+      - key: ADMIN_PASSWORD
+        sync: false          # set in the dashboard (secret) — do NOT commit
+    disk:
+      name: staysathi-data
+      mountPath: /data       # matches DATA_DIR so db.json survives restarts
+      sizeGB: 1
