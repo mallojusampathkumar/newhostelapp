@@ -138,7 +138,7 @@ export default function Alerts({ overview, refreshOverview }) {
             <button className="btn btn-sm btn-primary" onClick={() => setModal('addComplaint')}>➕ {t('addComplaint')}</button>
           </div>
           <div className="mt16">
-            {complaints && complaints.length === 0 && <Empty icon="🎉" text="—" />}
+            {complaints && complaints.length === 0 && <Empty icon="🎉" text={t('noComplaintsYet')} />}
             {(complaints || []).map(c => {
               const ico = CMP_CATS.find(x => x[0] === c.category)?.[1] || '📦';
               return (
@@ -171,7 +171,7 @@ export default function Alerts({ overview, refreshOverview }) {
             <button className="btn btn-sm btn-primary" onClick={() => setModal('postNotice')}>➕ {t('postNotice')}</button>
           </div>
           <div className="mt16">
-            {notices && shownNotices.length === 0 && <Empty icon="📢" text="—" />}
+            {notices && shownNotices.length === 0 && <Empty icon="📢" text={t('noNoticesYet')} />}
             {shownNotices.map(n => (
               <div key={n.id} className="list-item" style={{ alignItems: 'flex-start' }}>
                 <div className="avatar" style={{ background: 'linear-gradient(135deg,#fdaa3d,#ffeaa7)', color: '#5c3c00' }}>📢</div>
@@ -188,7 +188,7 @@ export default function Alerts({ overview, refreshOverview }) {
 
       {seg === 'activity' && (
         <div className="mt16">
-          {activities && shownActivities.length === 0 && <Empty icon="🕓" text="—" />}
+          {activities && shownActivities.length === 0 && <Empty icon="🕓" text={t('noActivityYet')} />}
           {shownActivities.map(a => (
             <div key={a.id} className="list-item">
               <div className="avatar" style={{ background: 'var(--surface2)', color: 'var(--text)' }}>{a.icon}</div>

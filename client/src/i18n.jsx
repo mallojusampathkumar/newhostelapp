@@ -174,7 +174,20 @@ const T = {
     readonlyBanner: 'Trial ended — read-only mode. Upgrade to keep managing your property.',
     contactSupport: 'Contact support', checkAgain: 'Check again',
     // misc
-    uploadScreenshot: 'Attach UPI screenshot (optional)', joined: 'Joined', share: 'Share'
+    uploadScreenshot: 'Attach UPI screenshot (optional)', joined: 'Joined', share: 'Share',
+    // staff salaries
+    paySalary: 'Pay Salary', editStaff: 'Edit Staff', salaryHistory: 'Salary History',
+    salaryDue: 'Salary due', salaryRecorded: 'Salary paid ✔', forMonth: 'For month',
+    monthlySalaries: 'Monthly salaries', lastPaid: 'Last paid',
+    noStaffYet: 'No staff yet — add your cook, watchman or cleaner',
+    noSalaryPayments: 'No salary payments yet',
+    // empty states
+    noMeters: 'No meter readings yet — add your first reading',
+    noExpensesYet: 'No expenses recorded yet',
+    noComplaintsYet: 'No complaints — all good! 🎉',
+    noNoticesYet: 'No notices posted yet',
+    noActivityYet: 'No activity yet',
+    noPaymentsRecorded: 'No payments recorded yet'
   },
 
   /* ---------- Hindi ---------- */
@@ -247,7 +260,12 @@ const T = {
     emptyFloor: 'इस मंज़िल पर अभी कमरे नहीं। + दबाकर जोड़ें।',
     receipt: 'रसीद', date: 'तारीख़', deleteQ: 'हटाएँ?', yes: 'हाँ', no: 'नहीं',
     freePlan: 'मुफ़्त प्लान', premiumPlan: 'प्रीमियम प्लान',
-    madeWith: 'भारतीय मालिकों के लिए ❤️ से बनाया'
+    madeWith: 'भारतीय मालिकों के लिए ❤️ से बनाया',
+    paySalary: 'सैलरी दें', editStaff: 'स्टाफ बदलें', salaryHistory: 'सैलरी इतिहास',
+    salaryDue: 'सैलरी बाकी', salaryRecorded: 'सैलरी दर्ज ✔', forMonth: 'किस महीने की',
+    monthlySalaries: 'मासिक सैलरी', lastPaid: 'पिछली बार दी',
+    noStaffYet: 'अभी कोई स्टाफ नहीं — रसोइया या चौकीदार जोड़ें',
+    noSalaryPayments: 'अभी कोई सैलरी भुगतान नहीं'
   },
 
   /* ---------- Telugu ---------- */
@@ -320,7 +338,12 @@ const T = {
     emptyFloor: 'ఈ అంతస్తులో ఇంకా గదులు లేవు. + నొక్కి జోడించండి.',
     receipt: 'రసీదు', date: 'తేదీ', deleteQ: 'తొలగించాలా?', yes: 'అవును', no: 'కాదు',
     freePlan: 'ఉచిత ప్లాన్', premiumPlan: 'ప్రీమియం ప్లాన్',
-    madeWith: 'భారతీయ యజమానుల కోసం ❤️ తో తయారు'
+    madeWith: 'భారతీయ యజమానుల కోసం ❤️ తో తయారు',
+    paySalary: 'జీతం ఇవ్వండి', editStaff: 'సిబ్బంది మార్చండి', salaryHistory: 'జీతాల చరిత్ర',
+    salaryDue: 'జీతం బాకీ', salaryRecorded: 'జీతం నమోదైంది ✔', forMonth: 'ఏ నెలకు',
+    monthlySalaries: 'నెల జీతాలు', lastPaid: 'చివరిసారి ఇచ్చింది',
+    noStaffYet: 'ఇంకా సిబ్బంది లేరు — వంటవారు లేదా వాచ్‌మన్ చేర్చండి',
+    noSalaryPayments: 'ఇంకా జీతం చెల్లింపులు లేవు'
   },
 
   /* ---------- Tamil ---------- */
@@ -393,7 +416,12 @@ const T = {
     emptyFloor: 'இந்தத் தளத்தில் அறைகள் இல்லை. + தட்டி சேர்க்கவும்.',
     receipt: 'ரசீது', date: 'தேதி', deleteQ: 'நீக்கவா?', yes: 'ஆம்', no: 'இல்லை',
     freePlan: 'இலவச திட்டம்', premiumPlan: 'பிரீமியம் திட்டம்',
-    madeWith: 'இந்திய உரிமையாளர்களுக்காக ❤️ உடன் உருவாக்கப்பட்டது'
+    madeWith: 'இந்திய உரிமையாளர்களுக்காக ❤️ உடன் உருவாக்கப்பட்டது',
+    paySalary: 'சம்பளம் கொடுங்கள்', editStaff: 'பணியாளர் திருத்து', salaryHistory: 'சம்பள வரலாறு',
+    salaryDue: 'சம்பளம் நிலுவை', salaryRecorded: 'சம்பளம் பதிவானது ✔', forMonth: 'எந்த மாதத்திற்கு',
+    monthlySalaries: 'மாத சம்பளங்கள்', lastPaid: 'கடைசியாக கொடுத்தது',
+    noStaffYet: 'இன்னும் பணியாளர்கள் இல்லை — சமையல்காரர் அல்லது காவலாளியைச் சேர்க்கவும்',
+    noSalaryPayments: 'இன்னும் சம்பளப் பதிவுகள் இல்லை'
   },
 
   /* ---------- Kannada ---------- */
@@ -466,7 +494,12 @@ const T = {
     emptyFloor: 'ಈ ಮಹಡಿಯಲ್ಲಿ ಇನ್ನೂ ಕೊಠಡಿಗಳಿಲ್ಲ. + ಒತ್ತಿ ಸೇರಿಸಿ.',
     receipt: 'ರಸೀದಿ', date: 'ದಿನಾಂಕ', deleteQ: 'ಅಳಿಸುವುದೇ?', yes: 'ಹೌದು', no: 'ಇಲ್ಲ',
     freePlan: 'ಉಚಿತ ಯೋಜನೆ', premiumPlan: 'ಪ್ರೀಮಿಯಂ ಯೋಜನೆ',
-    madeWith: 'ಭಾರತೀಯ ಮಾಲೀಕರಿಗಾಗಿ ❤️ ಇಂದ'
+    madeWith: 'ಭಾರತೀಯ ಮಾಲೀಕರಿಗಾಗಿ ❤️ ಇಂದ',
+    paySalary: 'ಸಂಬಳ ಕೊಡಿ', editStaff: 'ಸಿಬ್ಬಂದಿ ಬದಲಿಸಿ', salaryHistory: 'ಸಂಬಳ ಇತಿಹಾಸ',
+    salaryDue: 'ಸಂಬಳ ಬಾಕಿ', salaryRecorded: 'ಸಂಬಳ ದಾಖಲಾಯಿತು ✔', forMonth: 'ಯಾವ ತಿಂಗಳಿಗೆ',
+    monthlySalaries: 'ತಿಂಗಳ ಸಂಬಳಗಳು', lastPaid: 'ಕೊನೆಯ ಬಾರಿ ಕೊಟ್ಟದ್ದು',
+    noStaffYet: 'ಇನ್ನೂ ಸಿಬ್ಬಂದಿ ಇಲ್ಲ — ಅಡುಗೆಯವರು ಅಥವಾ ಕಾವಲುಗಾರರನ್ನು ಸೇರಿಸಿ',
+    noSalaryPayments: 'ಇನ್ನೂ ಸಂಬಳ ಪಾವತಿಗಳಿಲ್ಲ'
   },
 
   /* ---------- Marathi ---------- */
@@ -539,7 +572,12 @@ const T = {
     emptyFloor: 'या मजल्यावर अजून खोल्या नाहीत. + दाबून जोडा.',
     receipt: 'पावती', date: 'तारीख', deleteQ: 'काढायचं?', yes: 'हो', no: 'नाही',
     freePlan: 'मोफत योजना', premiumPlan: 'प्रीमियम योजना',
-    madeWith: 'भारतीय मालकांसाठी ❤️ ने बनवलं'
+    madeWith: 'भारतीय मालकांसाठी ❤️ ने बनवलं',
+    paySalary: 'पगार द्या', editStaff: 'कर्मचारी बदला', salaryHistory: 'पगार इतिहास',
+    salaryDue: 'पगार बाकी', salaryRecorded: 'पगार नोंदवला ✔', forMonth: 'कोणत्या महिन्याचा',
+    monthlySalaries: 'मासिक पगार', lastPaid: 'शेवटचा दिला',
+    noStaffYet: 'अजून कर्मचारी नाहीत — स्वयंपाकी किंवा रखवालदार जोडा',
+    noSalaryPayments: 'अजून पगार भरणा नाही'
   }
 };
 

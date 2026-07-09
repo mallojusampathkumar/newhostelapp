@@ -38,7 +38,7 @@ export default function More({ overview, user, setUser, onLogout }) {
           <button className="btn btn-sm btn-primary" onClick={() => setModal('addReading')}>➕ {t('addReading')}</button>
         </div>
         <div className="mt16">
-          {meters && meters.length === 0 && <Empty icon="⚡" text="—" />}
+          {meters && meters.length === 0 && <Empty icon="⚡" text={t('noMeters')} />}
           {(meters || []).map(m => (
             <div key={m.id} className="list-item">
               <div className="avatar" style={{ background: 'linear-gradient(135deg,#f39c12,#ffeaa7)', color: '#5c3c00' }}>⚡</div>
