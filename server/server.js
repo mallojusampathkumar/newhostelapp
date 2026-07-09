@@ -398,8 +398,8 @@ app.delete('/api/properties/:id', auth, (req, res) => {
   const prop = ownProperty(req, res); if (!prop) return;
   const pid = prop.id;
   db.properties.splice(db.properties.indexOf(prop), 1);
-  for (const key of ['floors', 'rooms', 'beds', 'tenants', 'payments', 'expenses', 'complaints', 'notices', 'staff', 'meters']) {
-    db[key] = db[key].filter(x => x.propertyId !== pid);
+  for (const key of ['floors', 'rooms', 'beds', 'tenants', 'payments', 'expenses', 'complaints', 'notices', 'staff', 'salaryPayments', 'meters', 'paymentClaims']) {
+    db[key] = (db[key] || []).filter(x => x.propertyId !== pid);
   }
   logActivity(req.user.id, null, '🗑️', `Deleted property "${prop.name}"`);
   store.saveNow();
@@ -1198,6 +1198,20 @@ app.post('/api/staff', auth, (req, res) => {
   res.json({ staff: member });
 });
 
+app.put('/api/staff/:id', auth, (req, res) => {
+  const s = db.staff.find(x => x.id === req.params.id);
+  const prop = s && db.properties.find(p => p.id === s.propertyId && p.ownerId === req.user.id);
+  if (!prop) return res.status(404).json({ error: 'Staff not found' });
+  const { name, role, phone, salary, joinDate } = req.body || {};
+  if (name) s.name = String(name).trim();
+  if (role) s.role = role;
+  if (phone !== undefined) s.phone = phone;
+  if (salary !== undefined) s.salary = Number(salary) || 0;
+  if (joinDate) s.joinDate = joinDate;
+  store.save();
+  res.json({ staff: s });
+});
+
 app.delete('/api/staff/:id', auth, (req, res) => {
   const s = db.staff.find(x => x.id === req.params.id);
   const prop = s && db.properties.find(p => p.id === s.propertyId && p.ownerId === req.user.id);
@@ -1211,7 +1225,88 @@ app.get('/api/staff', auth, (req, res) => {
   const myProps = new Set(db.properties.filter(p => p.ownerId === req.user.id).map(p => p.id));
   let list = db.staff.filter(s => myProps.has(s.propertyId));
   if (req.query.propertyId) list = list.filter(s => s.propertyId === req.query.propertyId);
-  res.json({ staff: list.map(s => ({ ...s, propertyName: db.properties.find(p => p.id === s.propertyId)?.name })) });
+  const mk = monthKey(new Date());
+  res.json({
+    staff: list.map(s => {
+      const pays = (db.salaryPayments || []).filter(x => x.staffId === s.id);
+      const paidThisMonth = pays.filter(x => x.month === mk).reduce((a, x) => a + (Number(x.amount) || 0), 0);
+      const last = pays.sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+      return {
+        ...s,
+        propertyName: db.properties.find(p => p.id === s.propertyId)?.name,
+        paidThisMonth,
+        lastPaidDate: last?.date || null
+      };
+    })
+  });
+});
+
+/* ---------------- staff salary payments ---------------- */
+// A salary payment is stored twice on purpose: as a salaryPayments row (per
+// staff member, per month — powers the "paid / due" chip and history) and as
+// an expense with category "salary" so it automatically shows up in the
+// expenses list, monthly totals and income-vs-expense reports.
+
+app.post('/api/staff/:id/pay-salary', auth, (req, res) => {
+  const s = db.staff.find(x => x.id === req.params.id);
+  const prop = s && db.properties.find(p => p.id === s.propertyId && p.ownerId === req.user.id);
+  if (!prop) return res.status(404).json({ error: 'Staff not found' });
+  const { amount, month, mode, note, date } = req.body || {};
+  const amt = Number(amount) || 0;
+  if (amt <= 0) return res.status(400).json({ error: 'Enter a valid amount' });
+  const mk = /^\d{4}-\d{2}$/.test(String(month || '')) ? month : monthKey(new Date());
+  const payDate = date || new Date().toISOString().slice(0, 10);
+  const payment = {
+    id: store.id('sal'),
+    staffId: s.id, propertyId: s.propertyId,
+    staffName: s.name, role: s.role,
+    amount: amt, month: mk,
+    mode: mode || 'cash', note: note || '',
+    date: payDate,
+    createdAt: new Date().toISOString()
+  };
+  db.salaryPayments.push(payment);
+  const expense = {
+    id: store.id('exp'), propertyId: s.propertyId,
+    category: 'salary', amount: amt,
+    note: `${s.name} (${s.role}) — ${monthLabel(mk)}`,
+    salaryPaymentId: payment.id,
+    date: payDate, createdAt: new Date().toISOString()
+  };
+  db.expenses.push(expense);
+  const totalForMonth = db.salaryPayments
+    .filter(x => x.staffId === s.id && x.month === mk)
+    .reduce((a, x) => a + (Number(x.amount) || 0), 0);
+  logActivity(req.user.id, prop.id, '👛',
+    `₹${amt} salary paid to ${s.name} (${s.role}) for ${monthLabel(mk)}${totalForMonth < (Number(s.salary) || 0) ? ` — ₹${(Number(s.salary) || 0) - totalForMonth} still due` : ''}`);
+  store.saveNow();
+  res.json({ payment, paidThisMonth: totalForMonth });
+});
+
+app.get('/api/salary-payments', auth, (req, res) => {
+  const myProps = new Set(db.properties.filter(p => p.ownerId === req.user.id).map(p => p.id));
+  let list = (db.salaryPayments || []).filter(x => myProps.has(x.propertyId));
+  if (req.query.propertyId) list = list.filter(x => x.propertyId === req.query.propertyId);
+  if (req.query.staffId) list = list.filter(x => x.staffId === req.query.staffId);
+  if (req.query.month) list = list.filter(x => x.month === req.query.month);
+  list = [...list].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  res.json({
+    payments: list.slice(0, 300).map(x => ({
+      ...x,
+      monthLabel: monthLabel(x.month),
+      propertyName: db.properties.find(p => p.id === x.propertyId)?.name
+    }))
+  });
+});
+
+app.delete('/api/salary-payments/:id', auth, (req, res) => {
+  const pay = (db.salaryPayments || []).find(x => x.id === req.params.id);
+  const prop = pay && db.properties.find(p => p.id === pay.propertyId && p.ownerId === req.user.id);
+  if (!prop) return res.status(404).json({ error: 'Payment not found' });
+  db.salaryPayments = db.salaryPayments.filter(x => x.id !== pay.id);
+  db.expenses = db.expenses.filter(e => e.salaryPaymentId !== pay.id); // keep books in sync
+  store.saveNow();
+  res.json({ ok: true });
 });
 
 /* ---------------- electricity meters ---------------- */
@@ -1398,8 +1493,8 @@ app.delete('/api/admin/users/:id', adminOnly, (req, res) => {
   const propIds = new Set(db.properties.filter(p => p.ownerId === u.id).map(p => p.id));
   db.users = db.users.filter(x => x.id !== u.id);
   db.properties = db.properties.filter(p => p.ownerId !== u.id);
-  for (const key of ['floors', 'rooms', 'beds', 'tenants', 'payments', 'expenses', 'complaints', 'staff', 'meters']) {
-    db[key] = db[key].filter(x => !propIds.has(x.propertyId));
+  for (const key of ['floors', 'rooms', 'beds', 'tenants', 'payments', 'expenses', 'complaints', 'staff', 'salaryPayments', 'meters', 'paymentClaims']) {
+    db[key] = (db[key] || []).filter(x => !propIds.has(x.propertyId));
   }
   db.notices = db.notices.filter(n => n.ownerId !== u.id);
   db.activities = db.activities.filter(a => a.ownerId !== u.id);
@@ -1557,8 +1652,29 @@ function seedDemo() {
         });
       }
     }
-    db.staff.push({ id: store.id('stf'), propertyId: prop.id, name: 'Lakshmamma', role: 'cook', phone: '9111111111', salary: 9000, joinDate: monthsAgo(8), createdAt: new Date().toISOString() });
-    db.staff.push({ id: store.id('stf'), propertyId: prop.id, name: 'Yadaiah', role: 'watchman', phone: '9222222222', salary: 8000, joinDate: monthsAgo(11), createdAt: new Date().toISOString() });
+    const demoStaff = [
+      { id: store.id('stf'), propertyId: prop.id, name: 'Lakshmamma', role: 'cook', phone: '9111111111', salary: 9000, joinDate: monthsAgo(8), createdAt: new Date().toISOString() },
+      { id: store.id('stf'), propertyId: prop.id, name: 'Yadaiah', role: 'watchman', phone: '9222222222', salary: 8000, joinDate: monthsAgo(11), createdAt: new Date().toISOString() }
+    ];
+    db.staff.push(...demoStaff);
+    // last month's salaries were paid — this month is still due, so the demo
+    // shows both the "paid" and "due" states of the salary feature
+    for (const s of demoStaff) {
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const mk = monthKey(lastMonth);
+      const payDate = monthsAgo(1, 3);
+      const pay = {
+        id: store.id('sal'), staffId: s.id, propertyId: prop.id,
+        staffName: s.name, role: s.role, amount: s.salary, month: mk,
+        mode: 'cash', note: '', date: payDate, createdAt: new Date().toISOString()
+      };
+      db.salaryPayments.push(pay);
+      db.expenses.push({
+        id: store.id('exp'), propertyId: prop.id, category: 'salary', amount: s.salary,
+        note: `${s.name} (${s.role}) — ${monthLabel(mk)}`, salaryPaymentId: pay.id,
+        date: payDate, createdAt: new Date().toISOString()
+      });
+    }
     db.complaints.push({ id: store.id('cmp'), propertyId: prop.id, category: 'plumbing', text: 'Bathroom tap leaking on first floor', tenantName: 'Suresh Babu', roomName: '101', status: 'open', createdAt: new Date().toISOString() });
     db.complaints.push({ id: store.id('cmp'), propertyId: prop.id, category: 'wifi', text: 'WiFi very slow at night', tenantName: 'Kiran Rao', roomName: '102', status: 'resolved', createdAt: monthsAgo(1), resolvedAt: new Date().toISOString() });
     db.meters.push({ id: store.id('mtr'), propertyId: prop.id, label: 'Main Meter', reading: 4520, prevReading: 4210, units: 310, ratePerUnit: 8, bill: 2480, date: monthsAgo(0, 2), createdAt: new Date().toISOString() });

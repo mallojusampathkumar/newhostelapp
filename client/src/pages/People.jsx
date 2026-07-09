@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { get, post, del } from '../api.js';
+import { get, post, put, del } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import TenantSheet from '../components/TenantSheet.jsx';
@@ -10,14 +10,17 @@ const ROLES = [['cook', '🍲'], ['watchman', '💂'], ['cleaner', '🧹'], ['wa
 
 export default function People({ overview, refreshOverview }) {
   const { t } = useLang();
-  const [seg, setSeg] = useState('tenants'); // tenants | staff
+  const toast = useToast();
+  const [seg, setSeg] = useState('tenants'); // tenants | kyc | staff
   const [status, setStatus] = useState('active');
   const [search, setSearch] = useState('');
   const [propId, setPropId] = useState('');
   const [tenants, setTenants] = useState(null);
   const [staff, setStaff] = useState(null);
+  const [salaryHistory, setSalaryHistory] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [kycRecords, setKycRecords] = useState(null);
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(null); // 'addStaff' | {payStaff} | {editStaff}
   const [sheetTenant, setSheetTenant] = useState(null);
 
   const properties = overview?.properties || [];
@@ -26,6 +29,7 @@ export default function People({ overview, refreshOverview }) {
   const load = useCallback(() => {
     get(`/tenants${q}`).then(d => setTenants(d.tenants)).catch(() => {});
     get(`/staff${q}`).then(d => setStaff(d.staff)).catch(() => {});
+    get(`/salary-payments${q}`).then(d => setSalaryHistory(d.payments)).catch(() => {});
     get('/kyc-records').then(d => setKycRecords(d.records)).catch(() => {});
   }, [q]);
   useEffect(() => { load(); }, [load]);
@@ -69,7 +73,7 @@ export default function People({ overview, refreshOverview }) {
             <button className="btn btn-sm" onClick={exportKyc}>⬇️ {t('kycExport')}</button>
           </div>
           <div className="mt16">
-            {kycRecords && kycRecords.length === 0 && <Empty icon="🪪" text="—" />}
+            {kycRecords && kycRecords.length === 0 && <Empty icon="🪪" text={t('noTenants')} />}
             {(kycRecords || [])
               .filter(r => !propId || (tenants || []).some(x => x.id === r.id && x.propertyId === propId))
               .sort((a, b) => (a.kycStatus === 'submitted' ? -1 : 0) - (b.kycStatus === 'submitted' ? -1 : 0))
@@ -126,33 +130,83 @@ export default function People({ overview, refreshOverview }) {
       {seg === 'staff' && (
         <>
           <div className="row spread mt16">
-            <span className="chip">🧹 {(staff || []).length} {t('staffTitle')}</span>
+            <span className="chip">👛 {t('monthlySalaries')}: {rupee((staff || []).reduce((a, s) => a + (Number(s.salary) || 0), 0))}</span>
             <button className="btn btn-sm btn-primary" onClick={() => setModal('addStaff')}>➕ {t('addStaff')}</button>
           </div>
-          <div className="mt16">
-            {staff && staff.length === 0 && <Empty icon="🧹" text="—" />}
-            {(staff || []).map(s => {
-              const ico = ROLES.find(r => r[0] === s.role)?.[1] || '🤝';
-              return (
-                <div key={s.id} className="list-item">
-                  <div className="avatar" style={{ background: 'linear-gradient(135deg,#0984e3,#74b9ff)' }}>{ico}</div>
+          <div className="row wrap mt8">
+            <button className={`chip ${!showHistory ? 'active' : ''}`} onClick={() => setShowHistory(false)}>🧹 {t('staffTitle')} ({(staff || []).length})</button>
+            <button className={`chip ${showHistory ? 'active' : ''}`} onClick={() => setShowHistory(true)}>🧾 {t('salaryHistory')}</button>
+          </div>
+
+          {!showHistory && (
+            <div className="mt16">
+              {staff && staff.length === 0 && <Empty icon="🧹" text={t('noStaffYet')} />}
+              {(staff || []).map(s => {
+                const ico = ROLES.find(r => r[0] === s.role)?.[1] || '🤝';
+                const salary = Number(s.salary) || 0;
+                const paid = Number(s.paidThisMonth) || 0;
+                const chip = salary <= 0 ? null
+                  : paid >= salary ? ['green', `✅ ${t('paid')} · ${t('thisMonth')}`]
+                  : paid > 0 ? ['orange', `🟡 ${t('partialPaid')} ${rupee(paid)}/${rupee(salary)}`]
+                  : ['red', `⏳ ${t('salaryDue')} · ${t('thisMonth')}`];
+                return (
+                  <div key={s.id} className="list-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div className="row">
+                      <div className="avatar" style={{ background: 'linear-gradient(135deg,#0984e3,#74b9ff)' }}>{ico}</div>
+                      <div className="grow">
+                        <b>{s.name}</b>
+                        <div className="muted small">{t(s.role)} · {s.propertyName}{s.phone ? ` · 📱 ${s.phone}` : ''}</div>
+                      </div>
+                      <b>{rupee(salary)}<span className="muted small">/mo</span></b>
+                    </div>
+                    <div className="row wrap mt8">
+                      {chip && <span className={`chip small ${chip[0]}`}>{chip[1]}</span>}
+                      {s.lastPaidDate && <span className="chip small">🗓️ {t('lastPaid')}: {s.lastPaidDate}</span>}
+                    </div>
+                    <div className="row mt8">
+                      <button className="btn btn-sm btn-green grow" onClick={() => setModal({ payStaff: s })}>💸 {t('paySalary')}</button>
+                      <button className="btn btn-sm" title={t('editStaff')} onClick={() => setModal({ editStaff: s })}>✏️</button>
+                      <button className="btn btn-sm btn-ghost" onClick={async () => { if (window.confirm(t('deleteQ'))) { await del(`/staff/${s.id}`); load(); } }}>🗑️</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {showHistory && (
+            <div className="mt16">
+              {salaryHistory && salaryHistory.length === 0 && <Empty icon="👛" text={t('noSalaryPayments')} />}
+              {(salaryHistory || []).map(p => (
+                <div key={p.id} className="list-item">
+                  <div className="avatar" style={{ background: 'linear-gradient(135deg,#f59f00,#ffc14d)' }}>👛</div>
                   <div className="grow">
-                    <b>{s.name}</b>
-                    <div className="muted small">{t(s.role)} · {s.propertyName} {s.phone && `· 📱 ${s.phone}`}</div>
+                    <b>{p.staffName}</b> <span className="muted small">· {t(p.role)}</span>
+                    <div className="muted small">📅 {p.monthLabel} · {p.date} · {String(p.mode).toUpperCase()}{p.note ? ` · ${p.note}` : ''}</div>
                   </div>
                   <div className="row">
-                    <b>{rupee(s.salary)}</b>
-                    <button className="btn btn-sm btn-ghost" onClick={async () => { if (window.confirm(t('deleteQ'))) { await del(`/staff/${s.id}`); load(); } }}>🗑️</button>
+                    <b>{rupee(p.amount)}</b>
+                    <button className="btn btn-sm btn-ghost" onClick={async () => {
+                      if (window.confirm(t('deleteQ'))) { await del(`/salary-payments/${p.id}`); load(); refreshOverview && refreshOverview(); }
+                    }}>🗑️</button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 
       {modal === 'addStaff' && (
-        <AddStaffModal properties={properties} onDone={() => { setModal(null); load(); }} onClose={() => setModal(null)} />
+        <StaffModal properties={properties} defaultProp={propId} onDone={() => { setModal(null); load(); }} onClose={() => setModal(null)} />
+      )}
+      {modal?.editStaff && (
+        <StaffModal properties={properties} staff={modal.editStaff} onDone={() => { setModal(null); load(); }} onClose={() => setModal(null)} />
+      )}
+      {modal?.payStaff && (
+        <PaySalaryModal staff={modal.payStaff}
+          onDone={() => { setModal(null); toast(t('salaryRecorded')); load(); refreshOverview && refreshOverview(); }}
+          onClose={() => setModal(null)} />
       )}
       {sheetTenant && (
         <TenantSheet tenant={sheetTenant}
@@ -163,24 +217,35 @@ export default function People({ overview, refreshOverview }) {
   );
 }
 
-function AddStaffModal({ properties, onDone, onClose }) {
+/* add + edit share one modal: pass `staff` to edit */
+function StaffModal({ properties, staff, defaultProp, onDone, onClose }) {
   const { t } = useLang();
   const toast = useToast();
-  const [f, setF] = useState({ propertyId: properties[0]?.id || '', name: '', role: 'cook', phone: '', salary: '' });
+  const editing = !!staff;
+  const [f, setF] = useState({
+    propertyId: staff?.propertyId || defaultProp || properties[0]?.id || '',
+    name: staff?.name || '', role: staff?.role || 'cook',
+    phone: staff?.phone || '', salary: staff?.salary ?? ''
+  });
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
     e.preventDefault(); setBusy(true);
-    try { await post('/staff', f); onDone(); }
-    catch (err) { toast(err.message, 'err'); setBusy(false); }
+    try {
+      if (editing) await put(`/staff/${staff.id}`, f);
+      else await post('/staff', f);
+      onDone();
+    } catch (err) { toast(err.message, 'err'); setBusy(false); }
   };
   return (
-    <Modal title={t('addStaff')} icon="🧹" onClose={onClose}>
+    <Modal title={editing ? t('editStaff') : t('addStaff')} icon={editing ? '✏️' : '🧹'} onClose={onClose}>
       <form onSubmit={submit}>
-        <Field label={`🏠 ${t('properties')}`}>
-          <select className="input" required value={f.propertyId} onChange={e => setF({ ...f, propertyId: e.target.value })}>
-            {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
-          </select>
-        </Field>
+        {!editing && (
+          <Field label={`🏠 ${t('properties')}`}>
+            <select className="input" required value={f.propertyId} onChange={e => setF({ ...f, propertyId: e.target.value })}>
+              {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
+            </select>
+          </Field>
+        )}
         <Field label={`🙍 ${t('yourName')}`}>
           <input className="input" required value={f.name} onChange={e => setF({ ...f, name: e.target.value })} />
         </Field>
@@ -200,6 +265,70 @@ function AddStaffModal({ properties, onDone, onClose }) {
           </Field>
         </div>
         <button className="btn btn-primary btn-block" disabled={busy}>✅ {t('save')}</button>
+      </form>
+    </Modal>
+  );
+}
+
+/* record a salary payment — amount prefills with what is still due this month */
+function PaySalaryModal({ staff, onDone, onClose }) {
+  const { t } = useLang();
+  const toast = useToast();
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const salary = Number(staff.salary) || 0;
+  const dueNow = Math.max(0, salary - (Number(staff.paidThisMonth) || 0));
+  const [f, setF] = useState({
+    amount: String(dueNow || salary || ''),
+    month: thisMonth,
+    mode: 'cash',
+    date: new Date().toISOString().slice(0, 10),
+    note: ''
+  });
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
+    e.preventDefault(); setBusy(true);
+    try { await post(`/staff/${staff.id}/pay-salary`, f); onDone(); }
+    catch (err) { toast(err.message, 'err'); setBusy(false); }
+  };
+  return (
+    <Modal title={`${t('paySalary')} — ${staff.name}`} icon="💸" onClose={onClose}>
+      <p className="muted small mb16">
+        {ROLES.find(r => r[0] === staff.role)?.[1] || '🤝'} {t(staff.role)} · {staff.propertyName} · 👛 {rupee(salary)}/mo
+      </p>
+      <form onSubmit={submit}>
+        <Field label={`💰 ${t('amount')}`}>
+          <input className="input" type="number" min="1" required autoFocus value={f.amount}
+            onChange={e => setF({ ...f, amount: e.target.value })} />
+        </Field>
+        {salary > 0 && (
+          <div className="row wrap mb16">
+            {dueNow > 0 && dueNow !== salary && (
+              <button type="button" className={`chip ${Number(f.amount) === dueNow ? 'active' : ''}`}
+                onClick={() => setF({ ...f, amount: String(dueNow) })}>{t('salaryDue')}: {rupee(dueNow)}</button>
+            )}
+            <button type="button" className={`chip ${Number(f.amount) === salary ? 'active' : ''}`}
+              onClick={() => setF({ ...f, amount: String(salary) })}>{t('salaryPerMonth')}: {rupee(salary)}</button>
+          </div>
+        )}
+        <div className="row">
+          <Field label={`📅 ${t('forMonth')}`}>
+            <input className="input" type="month" required value={f.month} onChange={e => setF({ ...f, month: e.target.value })} />
+          </Field>
+          <Field label={`📅 ${t('date')}`}>
+            <input className="input" type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} />
+          </Field>
+        </div>
+        <Field label={t('payMode')}>
+          <div className="seg">
+            {[['cash', `💵 ${t('cash')}`], ['upi', '📲 UPI'], ['bank', `🏦 ${t('bank')}`]].map(([v, l]) => (
+              <button type="button" key={v} className={f.mode === v ? 'active' : ''} onClick={() => setF({ ...f, mode: v })}>{l}</button>
+            ))}
+          </div>
+        </Field>
+        <Field label={`📝 ${t('note')}`}>
+          <input className="input" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} />
+        </Field>
+        <button className="btn btn-green btn-block" disabled={busy || !(Number(f.amount) > 0)}>✅ {t('save')}</button>
       </form>
     </Modal>
   );

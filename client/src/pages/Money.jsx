@@ -137,7 +137,7 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
             <span className="chip green">🧾 {(payments || []).length}</span>
             <button className="btn btn-sm" onClick={exportPayments}>⬇️ {t('exportCsv')}</button>
           </div>
-          {payments && payments.length === 0 && <Empty icon="🧾" text="—" />}
+          {payments && payments.length === 0 && <Empty icon="🧾" text={t('noPaymentsRecorded')} />}
           {(payments || []).map(p => (
             <div key={p.id} className="list-item">
               <div className="avatar" style={{ background: p.type === 'advance' ? 'linear-gradient(135deg,#0984e3,#74b9ff)' : 'linear-gradient(135deg,#0ea97f,#2fd3a5)' }}>{p.type === 'advance' ? '🏦' : '₹'}</div>
@@ -171,7 +171,7 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
               <button className="btn btn-sm btn-primary" onClick={() => setModal('addExpense')}>➕ {t('addExpense')}</button>
             </div>
           </div>
-          {expenses && expenses.length === 0 && <Empty icon="🛒" text="—" />}
+          {expenses && expenses.length === 0 && <Empty icon="🛒" text={t('noExpensesYet')} />}
           {(expenses || []).map(e => {
             const ico = EXPENSE_CATS.find(c => c[0] === e.category)?.[1] || '📦';
             return (

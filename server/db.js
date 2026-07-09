@@ -20,6 +20,7 @@ const EMPTY = {
   complaints: [],
   notices: [],
   staff: [],
+  salaryPayments: [],
   meters: [],
   activities: [],
   notifications: [],
