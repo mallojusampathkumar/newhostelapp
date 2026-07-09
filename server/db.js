@@ -3,7 +3,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = path.join(__dirname, 'data');
+// DATA_DIR is overridable so a mounted persistent volume (Render disk, Fly
+// volume, Docker volume) can live anywhere. Defaults to ./data for local dev.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 const EMPTY = {

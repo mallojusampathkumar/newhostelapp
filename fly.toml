@@ -1,0 +1,38 @@
+# Fly.io deployment config (cheaper alternative to Render).
+#   fly launch --no-deploy      # first time — creates the app
+#   fly volume create staysathi_data --size 1 --region sin
+#   fly secrets set ADMIN_PHONE=... ADMIN_PASSWORD=...
+#   fly deploy
+app = "staysathi"
+primary_region = "sin"        # Singapore — low latency for India
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "5050"
+  DATA_DIR = "/data"
+
+# Persistent volume so the JSON datastore survives restarts/redeploys.
+[[mounts]]
+  source = "staysathi_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 5050
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1     # keep 1 up so writes are never lost mid-sleep
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

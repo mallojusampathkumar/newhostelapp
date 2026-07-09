@@ -23,6 +23,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// health check — used by the Docker HEALTHCHECK, Render/Railway/Fly probes and
+// load balancers. Cheap, unauthenticated, performs no DB writes.
+const STARTED_AT = Date.now();
+app.get(['/health', '/healthz', '/api/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: Math.round((Date.now() - STARTED_AT) / 1000),
+    timestamp: new Date().toISOString(),
+    version: process.env.APP_VERSION || '1.0.0'
+  });
+});
+
 /* ---------------- auth helpers ---------------- */
 
 function hashPassword(pw) {

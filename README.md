@@ -73,3 +73,79 @@ The server seeds a ready-to-explore demo on first start:
 - **Frontend:** React 18 + Vite, hand-rolled glassmorphism design system,
   no UI framework — `client/`
 - The Express server also serves the built frontend, so one process runs the whole site.
+
+## 🚢 Deployment & DevOps
+
+The whole app ships as **one container** — Express serves both the API and the
+built React frontend. Data is a JSON file, so the only production requirement is
+a **persistent volume** mounted at `DATA_DIR` (defaults to `/data` in the image);
+without it, the filesystem is ephemeral and data is lost on restart.
+
+### Configuration (env vars)
+
+| Var | Default | Notes |
+|-----|---------|-------|
+| `PORT` | `5050` | Host injects its own; app respects it |
+| `DATA_DIR` | `server/data` | Point at a mounted volume in prod (e.g. `/data`) |
+| `ADMIN_PHONE` | `9999999999` | Seeded admin — **change in prod** |
+| `ADMIN_PASSWORD` | `admin123` | Seeded admin — **change in prod** |
+| `APP_VERSION` | `1.0.0` | Reported by `GET /health`; CI sets it to the commit SHA |
+
+Copy `.env.example` → `.env` for local runs. `.env` is gitignored.
+
+### Health check
+
+`GET /health` (aliases `/healthz`, `/api/health`) → `{"status":"ok",...}`.
+Used by the Docker `HEALTHCHECK` and by Render/Fly/Railway probes.
+
+### Run with Docker (local, production-parity)
+
+```bash
+docker compose up --build      # http://localhost:5050
+```
+
+Data persists in the `staysathi-data` named volume across restarts.
+
+### Deploy to a host (data-safe, cheap)
+
+| Host | IaC file | Persistence |
+|------|----------|-------------|
+| **Render** (recommended) | `render.yaml` | 1 GB disk at `/data` |
+| **Fly.io** (cheapest) | `fly.toml` | Fly volume at `/data` |
+
+**Render:** New + → Blueprint → pick this repo. Set `ADMIN_PHONE` /
+`ADMIN_PASSWORD` as secret env vars in the dashboard. Auto-deploys on push.
+
+**Fly.io:**
+
+```bash
+fly launch --no-deploy
+fly volume create staysathi_data --size 1 --region sin
+fly secrets set ADMIN_PHONE=... ADMIN_PASSWORD=...
+fly deploy
+```
+
+> ⚠️ Truly-free tiers (Render free, Vercel, Netlify) use ephemeral or read-only
+> disks and will silently lose data with the JSON store. Use a host with a
+> persistent volume, or migrate the datastore to Postgres first.
+
+### CI/CD (GitHub Actions)
+
+- **`.github/workflows/ci.yml`** — on every push/PR: installs deps, builds the
+  frontend, boots the server and asserts `/health`, then builds the Docker image
+  and smoke-tests the running container.
+- **`.github/workflows/deploy.yml`** — on push to `main`: builds and pushes a
+  versioned image to **GHCR** (`ghcr.io/<owner>/<repo>`), then triggers a Render
+  deploy if a `RENDER_DEPLOY_HOOK_URL` secret is set.
+
+### Repo layout (DevOps additions)
+
+```
+Dockerfile              multi-stage build (client → slim runtime, non-root, healthcheck)
+.dockerignore
+docker-compose.yml      local run + persistent volume
+render.yaml             Render blueprint (IaC) with 1 GB disk
+fly.toml                Fly.io config with volume
+.env.example            documented configuration
+.github/workflows/      ci.yml + deploy.yml
+```
