@@ -45,6 +45,8 @@ every time that property is opened.
 | 🔍 Global search | Spotlight-style search (`/` or Ctrl+K): find any tenant by name, phone or room and act instantly |
 | 🤖 Sathi insights | Daily greeting, animated collection-rate ring, occupancy and a smart "what to do next" tip |
 | 🎉 Celebrations | Confetti when rent is collected, animated count-up money figures, shimmer loading skeletons |
+| 📲 Install as app | Full PWA: install on any phone from More → "Install App", opens instantly, app shell works offline |
+| 📤 Business summary | One tap on Money → 📤 shares a WhatsApp digest — collected, dues, occupancy & top 5 pending tenants |
 
 ## 🏃 Run it
 

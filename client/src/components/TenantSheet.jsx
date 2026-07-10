@@ -244,7 +244,7 @@ export function CollectRent({ tenant, dues, onDone, onCancel }) {
           {extra > 0 && <div className="row spread small"><span>💚 {t('walletCredit')}</span><b>+ {rupee(extra)}</b></div>}
           <div className="row spread mt8" style={{ borderTop: '1px dashed var(--border2)', paddingTop: 8 }}>
             <b>{t('afterThisPayment')}</b>
-            <b style={{ color: remainingAfter > 0 ? '#c53030' : 'var(--green2)' }}>
+            <b style={{ color: remainingAfter > 0 ? 'var(--red-strong)' : 'var(--green2)' }}>
               {remainingAfter > 0 ? `⚠️ ${t('stillPending')} ${rupee(remainingAfter)}` : `✅ ${t('allClearAfter')}`}
             </b>
           </div>

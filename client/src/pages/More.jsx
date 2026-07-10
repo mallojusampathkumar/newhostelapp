@@ -12,7 +12,22 @@ export default function More({ overview, user, setUser, onLogout }) {
   const [meters, setMeters] = useState(null);
   const [modal, setModal] = useState(null);
   const [propId, setPropId] = useState('');
+  const [canInstall, setCanInstall] = useState(() => !!window.__ssInstallPrompt);
   const properties = overview?.properties || [];
+
+  useEffect(() => {
+    const h = () => setCanInstall(true);
+    window.addEventListener('ss-can-install', h);
+    return () => window.removeEventListener('ss-can-install', h);
+  }, []);
+
+  const installApp = async () => {
+    const prompt = window.__ssInstallPrompt;
+    if (!prompt) return;
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') { window.__ssInstallPrompt = null; setCanInstall(false); toast('📲 ✔'); }
+  };
 
   const loadMeters = useCallback(() => {
     get(`/meters${propId ? `?propertyId=${propId}` : ''}`).then(d => setMeters(d.meters)).catch(() => {});
@@ -86,6 +101,12 @@ export default function More({ overview, user, setUser, onLogout }) {
           <div className="avatar" style={{ background: 'linear-gradient(135deg,#f39c12,#fdaa3d)' }}>⚡</div>
           <b className="grow" style={{ textAlign: 'left' }}>{t('meters')}</b><span>›</span>
         </button>
+        {canInstall && (
+          <button className="list-item btn-block" style={{ width: '100%' }} onClick={installApp}>
+            <div className="avatar" style={{ background: 'linear-gradient(135deg,#0984e3,#74b9ff)' }}>📲</div>
+            <b className="grow" style={{ textAlign: 'left' }}>{t('installApp')}</b><span>›</span>
+          </button>
+        )}
       </div>
 
       <ThemePickerCard />

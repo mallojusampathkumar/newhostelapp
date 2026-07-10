@@ -194,6 +194,7 @@ const T = {
     tipDueIn: 'pending here', tipRemind: 'tap to see dues',
     tipVacantBeds: 'beds are empty — fill them to earn more',
     tipAllGood: 'Everything looks great today!',
+    installApp: 'Install App on Phone', shareSummary: 'Share Business Summary', topPending: 'Top pending',
     // empty states
     noMeters: 'No meter readings yet — add your first reading',
     noExpensesYet: 'No expenses recorded yet',
@@ -288,7 +289,8 @@ const T = {
     goodMorning: 'सुप्रभात', goodAfternoon: 'नमस्ते', goodEvening: 'शुभ संध्या',
     tipDueIn: 'यहाँ बाकी है', tipRemind: 'बकाया देखने के लिए दबाएँ',
     tipVacantBeds: 'बेड खाली हैं — भरें और ज़्यादा कमाएँ',
-    tipAllGood: 'आज सब कुछ बढ़िया है!'
+    tipAllGood: 'आज सब कुछ बढ़िया है!',
+    installApp: 'फोन पर ऐप इंस्टॉल करें', shareSummary: 'बिज़नेस सारांश भेजें', topPending: 'सबसे ज़्यादा बकाया'
   },
 
   /* ---------- Telugu ---------- */
@@ -376,7 +378,8 @@ const T = {
     goodMorning: 'శుభోదయం', goodAfternoon: 'నమస్కారం', goodEvening: 'శుభ సాయంత్రం',
     tipDueIn: 'ఇక్కడ బాకీ ఉంది', tipRemind: 'బాకీలు చూడటానికి నొక్కండి',
     tipVacantBeds: 'బెడ్లు ఖాళీగా ఉన్నాయి — నింపి ఎక్కువ సంపాదించండి',
-    tipAllGood: 'ఈరోజు అంతా బాగుంది!'
+    tipAllGood: 'ఈరోజు అంతా బాగుంది!',
+    installApp: 'ఫోన్‌లో యాప్ ఇన్‌స్టాల్ చేయండి', shareSummary: 'వ్యాపార సారాంశం పంపండి', topPending: 'అత్యధిక బాకీలు'
   },
 
   /* ---------- Tamil ---------- */
@@ -464,7 +467,8 @@ const T = {
     goodMorning: 'காலை வணக்கம்', goodAfternoon: 'வணக்கம்', goodEvening: 'மாலை வணக்கம்',
     tipDueIn: 'இங்கே நிலுவை உள்ளது', tipRemind: 'நிலுவைகளை பார்க்க தட்டவும்',
     tipVacantBeds: 'படுக்கைகள் காலியாக உள்ளன — நிரப்பி அதிகம் சம்பாதிக்கவும்',
-    tipAllGood: 'இன்று எல்லாம் சிறப்பாக உள்ளது!'
+    tipAllGood: 'இன்று எல்லாம் சிறப்பாக உள்ளது!',
+    installApp: 'போனில் ஆப்பை நிறுவவும்', shareSummary: 'வணிக சுருக்கத்தை அனுப்பவும்', topPending: 'அதிக நிலுவைகள்'
   },
 
   /* ---------- Kannada ---------- */
@@ -552,7 +556,8 @@ const T = {
     goodMorning: 'ಶುಭೋದಯ', goodAfternoon: 'ನಮಸ್ಕಾರ', goodEvening: 'ಶುಭ ಸಂಜೆ',
     tipDueIn: 'ಇಲ್ಲಿ ಬಾಕಿ ಇದೆ', tipRemind: 'ಬಾಕಿ ನೋಡಲು ಒತ್ತಿ',
     tipVacantBeds: 'ಹಾಸಿಗೆಗಳು ಖಾಲಿ ಇವೆ — ತುಂಬಿಸಿ ಹೆಚ್ಚು ಗಳಿಸಿ',
-    tipAllGood: 'ಇಂದು ಎಲ್ಲವೂ ಚೆನ್ನಾಗಿದೆ!'
+    tipAllGood: 'ಇಂದು ಎಲ್ಲವೂ ಚೆನ್ನಾಗಿದೆ!',
+    installApp: 'ಫೋನ್‌ನಲ್ಲಿ ಆ್ಯಪ್ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ', shareSummary: 'ವ್ಯಾಪಾರ ಸಾರಾಂಶ ಕಳುಹಿಸಿ', topPending: 'ಹೆಚ್ಚು ಬಾಕಿ'
   },
 
   /* ---------- Marathi ---------- */
@@ -640,7 +645,8 @@ const T = {
     goodMorning: 'सुप्रभात', goodAfternoon: 'नमस्कार', goodEvening: 'शुभ संध्याकाळ',
     tipDueIn: 'इथे बाकी आहे', tipRemind: 'बाकी पाहण्यासाठी दाबा',
     tipVacantBeds: 'बेड रिकामे आहेत — भरा आणि जास्त कमवा',
-    tipAllGood: 'आज सगळं छान आहे!'
+    tipAllGood: 'आज सगळं छान आहे!',
+    installApp: 'फोनवर अ‍ॅप इन्स्टॉल करा', shareSummary: 'व्यवसाय सारांश पाठवा', topPending: 'सर्वात जास्त बाकी'
   }
 };
 

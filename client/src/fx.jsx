@@ -4,10 +4,16 @@ import React, { useEffect, useRef, useState } from 'react';
 
 const CONFETTI_COLORS = ['#6c5ce7', '#0ea97f', '#f59f00', '#ec4899', '#3b82f6', '#e5484d', '#2fd3a5', '#ffc14d'];
 
+/* Light haptic tap on phones that support it; silently ignored elsewhere. */
+export function buzz(pattern = 15) {
+  try { navigator.vibrate && navigator.vibrate(pattern); } catch { /* unsupported */ }
+}
+
 /* Fire a confetti burst from the middle of the screen (rent collected,
    dues cleared…). Pieces are plain divs animated with WAAPI and removed
    when done, so repeated bursts never leak nodes. */
 export function confetti({ count = 90, big = false } = {}) {
+  buzz(big ? [40, 60, 80] : [25, 40]);
   const wrap = document.createElement('div');
   wrap.className = 'confetti-layer';
   document.body.appendChild(wrap);

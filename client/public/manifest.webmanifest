@@ -1,0 +1,16 @@
+{
+  "name": "StaySathi — Hostel, PG & Flat Manager",
+  "short_name": "StaySathi",
+  "description": "Manage rooms, tenants and rent in your own language — as easy as tapping bubbles.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f5fc",
+  "theme_color": "#6c5ce7",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
