@@ -1,5 +1,6 @@
 import React, { useEffect, useState, createContext, useContext, useCallback } from 'react';
 import { LangProvider, useLang } from './i18n.jsx';
+import { ThemeProvider, useTheme } from './theme.jsx';
 import { get, setToken, getToken } from './api.js';
 import Landing from './pages/Landing.jsx';
 import Auth from './pages/Auth.jsx';
@@ -19,11 +20,22 @@ function Toasts({ items }) {
   );
 }
 
+/* slow-drifting gradient blobs behind every screen — colours come from the
+   active theme's CSS variables */
+function Aurora() {
+  return (
+    <div className="aurora" aria-hidden="true">
+      <i className="a1" /><i className="a2" /><i className="a3" />
+    </div>
+  );
+}
+
 function Root() {
   const [user, setUser] = useState(null);
   const [view, setView] = useState('boot'); // boot | landing | login | signup | app | portal
   const [toasts, setToasts] = useState([]);
   const { setLang } = useLang();
+  const { setTheme } = useTheme();
 
   // public tenant portal — /portal/<token> works without login
   const portalToken = window.location.pathname.startsWith('/portal/')
@@ -40,9 +52,14 @@ function Root() {
     if (portalToken) { setView('portal'); return; }
     if (!getToken()) { setView('landing'); return; }
     get('/me')
-      .then(({ user }) => { setUser(user); if (user.language) setLang(user.language); setView('app'); })
+      .then(({ user }) => {
+        setUser(user);
+        if (user.language) setLang(user.language);
+        if (user.theme) setTheme(user.theme);
+        setView('app');
+      })
       .catch(() => { setToken(null); setView('landing'); });
-  }, [setLang, portalToken]);
+  }, [setLang, setTheme, portalToken]);
 
   // account blocked / approval revoked mid-session → re-check and lock the UI
   useEffect(() => {
@@ -57,6 +74,7 @@ function Root() {
     setToken(token);
     setUser(u);
     if (u.language) setLang(u.language);
+    if (u.theme) setTheme(u.theme);
     setView('app');
   };
   const logout = () => { setToken(null); setUser(null); setView('landing'); };
@@ -67,6 +85,7 @@ function Root() {
 
   return (
     <ToastContext.Provider value={toast}>
+      <Aurora />
       {view === 'portal' && <Portal token={portalToken} />}
       {view === 'landing' && <Landing onLogin={() => setView('login')} onSignup={() => setView('signup')} />}
       {(view === 'login' || view === 'signup') && (
@@ -85,8 +104,10 @@ function Root() {
 
 export default function App() {
   return (
-    <LangProvider>
-      <Root />
-    </LangProvider>
+    <ThemeProvider>
+      <LangProvider>
+        <Root />
+      </LangProvider>
+    </ThemeProvider>
   );
 }

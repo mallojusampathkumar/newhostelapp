@@ -3,6 +3,7 @@ import { get, post, put, del } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from './ui.jsx';
 import { fileToDataUrl, printHtml, receiptHtml } from '../util.js';
+import { confetti } from '../fx.jsx';
 import { useToast } from '../App.jsx';
 
 /* Shared tenant action sheet — opened from Home beds, Money dues and People.
@@ -142,8 +143,10 @@ export default function TenantSheet({ tenant, onChanged, onClose }) {
       {view === 'collect' && (
         <CollectRent tenant={tenant} dues={dues}
           onDone={async (d) => {
+            const allClear = !d || d.dueAmount <= 0;
+            confetti(allClear ? { count: 120, big: true } : { count: 45 });
             await onChanged(); await refreshDues();
-            toast(d && d.dueAmount > 0 ? `✔ ${t('stillPending')}: ${rupee(d.dueAmount)}` : t('rentRecorded'));
+            toast(allClear ? t('rentRecorded') : `✔ ${t('stillPending')}: ${rupee(d.dueAmount)}`);
             setHistory(null); setView('main');
           }}
           onCancel={() => setView('main')} />

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { get, post, put, del } from '../api.js';
 import { useLang, LANGS } from '../i18n.jsx';
+import { useTheme, THEMES } from '../theme.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import { useToast } from '../App.jsx';
 
@@ -87,6 +88,8 @@ export default function More({ overview, user, setUser, onLogout }) {
         </button>
       </div>
 
+      <ThemePickerCard />
+
       <div className="card mt16">
         <b>🗣️ {t('chooseLanguage')}</b>
         <div className="lang-grid mt16">
@@ -104,6 +107,33 @@ export default function More({ overview, user, setUser, onLogout }) {
       {modal === 'editProfile' && (
         <EditProfileModal user={user} setUser={setUser} onClose={() => setModal(null)} />
       )}
+    </div>
+  );
+}
+
+/* live theme switcher — tap a mood, the whole app repaints instantly */
+function ThemePickerCard() {
+  const { t } = useLang();
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="card mt16">
+      <b>🎨 {t('themeTitle')}</b>
+      <div className="muted small mt8">{t('themeSub')}</div>
+      <div className="theme-grid mt16">
+        {THEMES.map(th => (
+          <button
+            key={th.id}
+            className={`theme-tile ${theme === th.id ? 'active' : ''}`}
+            onClick={() => setTheme(th.id)}
+          >
+            <span className="theme-preview" style={{ background: th.swatch[1] }}>
+              <i style={{ background: th.swatch[0] }} />
+              <i style={{ background: th.swatch[0], opacity: .55 }} />
+            </span>
+            <span className="theme-name">{th.icon} {t(`theme_${th.id}`)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

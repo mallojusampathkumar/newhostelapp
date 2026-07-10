@@ -4,6 +4,7 @@ import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import TenantSheet from '../components/TenantSheet.jsx';
 import { downloadCsv, printHtml, receiptHtml } from '../util.js';
+import { RupeeCount } from '../fx.jsx';
 import { useToast } from '../App.jsx';
 
 const EXPENSE_CATS = [
@@ -91,11 +92,11 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
       <div className="money-hero mt16">
         <div className="money-tile gain tap" onClick={() => setSeg('payments')}>
           <div className="muted small">✅ {t('collected')} · {t('thisMonth')}</div>
-          <div className="amt">{rupee(collected)}</div>
+          <div className="amt"><RupeeCount value={collected || 0} /></div>
         </div>
         <div className="money-tile loss tap" onClick={() => setSeg('dues')}>
           <div className="muted small">⚠️ {t('duesTitle')}</div>
-          <div className="amt">{rupee(totalDue)}</div>
+          <div className="amt"><RupeeCount value={totalDue} /></div>
         </div>
       </div>
 
