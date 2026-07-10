@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { get, post, put } from '../api.js';
 import { useLang } from '../i18n.jsx';
 import { Modal, Field, rupee } from '../components/ui.jsx';
+import { RupeeCount, CountUp, ProgressRing } from '../fx.jsx';
 import TenantSheet from '../components/TenantSheet.jsx';
 import SetupWizard from '../components/SetupWizard.jsx';
 import SmartImport from '../components/SmartImport.jsx';
@@ -13,7 +14,58 @@ import { useToast } from '../App.jsx';
 const PROP_ICONS = ['🏨', '🏡', '🏢', '🏬', '🏘️', '🛖'];
 const PROP_COLORS = ['#6C5CE7', '#00B894', '#E17055', '#0984E3', '#E84393', '#F39C12'];
 
-export default function BubbleHome({ overview, refreshOverview, go }) {
+/* Sathi's daily digest — greeting, live collection ring and a smart tip,
+   all computed from the overview the shell already fetched. */
+function InsightsCard({ totals, properties, go, user }) {
+  const { t } = useLang();
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? ['🌅', t('goodMorning')] : hour < 17 ? ['☀️', t('goodAfternoon')] : ['🌙', t('goodEvening')];
+  const expected = totals.collectedThisMonth + totals.dueAmount;
+  const rate = expected > 0 ? Math.round(totals.collectedThisMonth / expected * 100) : 100;
+  const occ = totals.beds > 0 ? Math.round(totals.occupied / totals.beds * 100) : 0;
+  const worst = [...properties].sort((a, b) => b.stats.dueAmount - a.stats.dueAmount)[0];
+
+  const tip = totals.dueTenants > 0 && worst?.stats.dueAmount > 0
+    ? `${worst.icon} ${worst.name}: ${rupee(worst.stats.dueAmount)} ${t('tipDueIn')} · ${t('tipRemind')}`
+    : totals.beds - totals.occupied > 0
+      ? `🛏️ ${totals.beds - totals.occupied} ${t('tipVacantBeds')}`
+      : `🎉 ${t('tipAllGood')}`;
+
+  return (
+    <div className="card insights mt16">
+      <div className="row" style={{ alignItems: 'flex-start' }}>
+        <div className="grow">
+          <div className="insights-greet">{greet[0]} {greet[1]}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}!</div>
+          <div className="muted small mt8">📈 {t('collectionRate')} · {t('thisMonth')}</div>
+          <div className="insights-amt"><RupeeCount value={totals.collectedThisMonth} /> <span className="muted small">/ {rupee(expected)}</span></div>
+          <div className="muted small mt8">🛏️ {t('occupancy')}: <b><CountUp value={occ} />%</b> · 👥 <CountUp value={totals.tenants} /> {t('tenants')}</div>
+        </div>
+        <ProgressRing pct={rate} color={rate >= 80 ? 'var(--green)' : rate >= 50 ? 'var(--orange)' : 'var(--red)'}>
+          <b style={{ fontSize: 20 }}><CountUp value={rate} />%</b>
+        </ProgressRing>
+      </div>
+      <button className="sathi-tip mt16" onClick={() => totals.dueTenants > 0 ? go && go('money', 'dues') : (go && go('people'))}>
+        <span className="tip-orb">🤖</span>
+        <span className="grow" style={{ textAlign: 'left' }}>{tip}</span>
+        <span>›</span>
+      </button>
+    </div>
+  );
+}
+
+/* shimmering placeholders while the overview loads */
+function HomeSkeleton() {
+  return (
+    <div className="bubble-field" aria-hidden="true">
+      <div className="skeleton skel-bubble" style={{ '--size': '210px' }} />
+      <div className="stat-strip">
+        {[0, 1, 2, 3].map(i => <div key={i} className="skeleton skel-tile" />)}
+      </div>
+    </div>
+  );
+}
+
+export default function BubbleHome({ overview, refreshOverview, go, user }) {
   const { t } = useLang();
   const toast = useToast();
 
@@ -96,7 +148,8 @@ export default function BubbleHome({ overview, refreshOverview, go }) {
         )}
 
         {/* ---------- ROOT: the owner bubble ---------- */}
-        {level === 'root' && (
+        {level === 'root' && !overview && <HomeSkeleton />}
+        {level === 'root' && overview && (
           <>
             <div className="bubble-field">
               <div className="bubble hero-bubble" onClick={() => setLevel('props')}>
@@ -113,11 +166,14 @@ export default function BubbleHome({ overview, refreshOverview, go }) {
             )}
             {totals && (
               <div className="stat-strip">
-                <div className="stat-tile tap" onClick={() => setLevel('props')}><div className="v">🏠 {totals.properties}</div><div className="k">{t('properties')}</div></div>
-                <div className="stat-tile tap" onClick={() => go && go('people')}><div className="v">🛏️ {totals.occupied}/{totals.beds}</div><div className="k">{t('occupancy')}</div></div>
-                <div className="stat-tile tap" onClick={() => go && go('money', 'payments')}><div className="v" style={{ color: 'var(--green2)' }}>{rupee(totals.collectedThisMonth)}</div><div className="k">{t('collected')}</div></div>
-                <div className="stat-tile tap" onClick={() => go && go('money', 'dues')}><div className="v" style={{ color: totals.dueAmount ? '#c53030' : 'var(--green2)' }}>{rupee(totals.dueAmount)}</div><div className="k">{t('rentDue')}</div></div>
+                <div className="stat-tile tap" onClick={() => setLevel('props')}><div className="v">🏠 <CountUp value={totals.properties} /></div><div className="k">{t('properties')}</div></div>
+                <div className="stat-tile tap" onClick={() => go && go('people')}><div className="v">🛏️ <CountUp value={totals.occupied} />/{totals.beds}</div><div className="k">{t('occupancy')}</div></div>
+                <div className="stat-tile tap" onClick={() => go && go('money', 'payments')}><div className="v" style={{ color: 'var(--green2)' }}><RupeeCount value={totals.collectedThisMonth} /></div><div className="k">{t('collected')}</div></div>
+                <div className="stat-tile tap" onClick={() => go && go('money', 'dues')}><div className="v" style={{ color: totals.dueAmount ? 'var(--red-strong)' : 'var(--green2)' }}><RupeeCount value={totals.dueAmount} /></div><div className="k">{t('rentDue')}</div></div>
               </div>
+            )}
+            {totals && totals.properties > 0 && (
+              <InsightsCard totals={totals} properties={properties} go={go} user={user} />
             )}
           </>
         )}

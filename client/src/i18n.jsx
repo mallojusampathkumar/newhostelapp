@@ -181,6 +181,20 @@ const T = {
     monthlySalaries: 'Monthly salaries', lastPaid: 'Last paid',
     noStaffYet: 'No staff yet — add your cook, watchman or cleaner',
     noSalaryPayments: 'No salary payments yet',
+    // search
+    searchEverything: 'Search tenant, phone, room…',
+    searchHint: 'Type a name, phone number or room. Tip: press / anytime to search.',
+    noResults: 'Nothing found',
+    // themes
+    themeTitle: 'App Theme', themeSub: 'Pick a mood — the whole app repaints instantly',
+    theme_daylight: 'Daylight', theme_midnight: 'Midnight', theme_ocean: 'Ocean',
+    theme_sunset: 'Sunset', theme_forest: 'Forest', theme_royal: 'Royal',
+    // insights
+    goodMorning: 'Good morning', goodAfternoon: 'Good afternoon', goodEvening: 'Good evening',
+    tipDueIn: 'pending here', tipRemind: 'tap to see dues',
+    tipVacantBeds: 'beds are empty — fill them to earn more',
+    tipAllGood: 'Everything looks great today!',
+    installApp: 'Install App on Phone', shareSummary: 'Share Business Summary', topPending: 'Top pending',
     // empty states
     noMeters: 'No meter readings yet — add your first reading',
     noExpensesYet: 'No expenses recorded yet',
@@ -265,7 +279,18 @@ const T = {
     salaryDue: 'सैलरी बाकी', salaryRecorded: 'सैलरी दर्ज ✔', forMonth: 'किस महीने की',
     monthlySalaries: 'मासिक सैलरी', lastPaid: 'पिछली बार दी',
     noStaffYet: 'अभी कोई स्टाफ नहीं — रसोइया या चौकीदार जोड़ें',
-    noSalaryPayments: 'अभी कोई सैलरी भुगतान नहीं'
+    noSalaryPayments: 'अभी कोई सैलरी भुगतान नहीं',
+    searchEverything: 'किरायेदार, फोन, कमरा खोजें…',
+    searchHint: 'नाम, फोन नंबर या कमरा लिखें।',
+    noResults: 'कुछ नहीं मिला',
+    themeTitle: 'ऐप थीम', themeSub: 'एक रंग चुनें — पूरा ऐप तुरंत बदल जाएगा',
+    theme_daylight: 'दिन', theme_midnight: 'आधी रात', theme_ocean: 'समुद्र',
+    theme_sunset: 'सूर्यास्त', theme_forest: 'जंगल', theme_royal: 'शाही',
+    goodMorning: 'सुप्रभात', goodAfternoon: 'नमस्ते', goodEvening: 'शुभ संध्या',
+    tipDueIn: 'यहाँ बाकी है', tipRemind: 'बकाया देखने के लिए दबाएँ',
+    tipVacantBeds: 'बेड खाली हैं — भरें और ज़्यादा कमाएँ',
+    tipAllGood: 'आज सब कुछ बढ़िया है!',
+    installApp: 'फोन पर ऐप इंस्टॉल करें', shareSummary: 'बिज़नेस सारांश भेजें', topPending: 'सबसे ज़्यादा बकाया'
   },
 
   /* ---------- Telugu ---------- */
@@ -343,7 +368,18 @@ const T = {
     salaryDue: 'జీతం బాకీ', salaryRecorded: 'జీతం నమోదైంది ✔', forMonth: 'ఏ నెలకు',
     monthlySalaries: 'నెల జీతాలు', lastPaid: 'చివరిసారి ఇచ్చింది',
     noStaffYet: 'ఇంకా సిబ్బంది లేరు — వంటవారు లేదా వాచ్‌మన్ చేర్చండి',
-    noSalaryPayments: 'ఇంకా జీతం చెల్లింపులు లేవు'
+    noSalaryPayments: 'ఇంకా జీతం చెల్లింపులు లేవు',
+    searchEverything: 'అద్దెదారు, ఫోన్, గది వెతకండి…',
+    searchHint: 'పేరు, ఫోన్ నంబర్ లేదా గది టైప్ చేయండి.',
+    noResults: 'ఏమీ దొరకలేదు',
+    themeTitle: 'యాప్ థీమ్', themeSub: 'ఒక రంగు ఎంచుకోండి — యాప్ మొత్తం వెంటనే మారుతుంది',
+    theme_daylight: 'పగలు', theme_midnight: 'అర్ధరాత్రి', theme_ocean: 'సముద్రం',
+    theme_sunset: 'సూర్యాస్తమయం', theme_forest: 'అడవి', theme_royal: 'రాజసం',
+    goodMorning: 'శుభోదయం', goodAfternoon: 'నమస్కారం', goodEvening: 'శుభ సాయంత్రం',
+    tipDueIn: 'ఇక్కడ బాకీ ఉంది', tipRemind: 'బాకీలు చూడటానికి నొక్కండి',
+    tipVacantBeds: 'బెడ్లు ఖాళీగా ఉన్నాయి — నింపి ఎక్కువ సంపాదించండి',
+    tipAllGood: 'ఈరోజు అంతా బాగుంది!',
+    installApp: 'ఫోన్‌లో యాప్ ఇన్‌స్టాల్ చేయండి', shareSummary: 'వ్యాపార సారాంశం పంపండి', topPending: 'అత్యధిక బాకీలు'
   },
 
   /* ---------- Tamil ---------- */
@@ -421,7 +457,18 @@ const T = {
     salaryDue: 'சம்பளம் நிலுவை', salaryRecorded: 'சம்பளம் பதிவானது ✔', forMonth: 'எந்த மாதத்திற்கு',
     monthlySalaries: 'மாத சம்பளங்கள்', lastPaid: 'கடைசியாக கொடுத்தது',
     noStaffYet: 'இன்னும் பணியாளர்கள் இல்லை — சமையல்காரர் அல்லது காவலாளியைச் சேர்க்கவும்',
-    noSalaryPayments: 'இன்னும் சம்பளப் பதிவுகள் இல்லை'
+    noSalaryPayments: 'இன்னும் சம்பளப் பதிவுகள் இல்லை',
+    searchEverything: 'குடியிருப்பாளர், ஃபோன், அறை தேடு…',
+    searchHint: 'பெயர், ஃபோன் எண் அல்லது அறை எழுதவும்.',
+    noResults: 'எதுவும் கிடைக்கவில்லை',
+    themeTitle: 'ஆப் தீம்', themeSub: 'ஒரு நிறம் தேர்வு செய்யுங்கள் — முழு ஆப்பும் உடனே மாறும்',
+    theme_daylight: 'பகல்', theme_midnight: 'நள்ளிரவு', theme_ocean: 'கடல்',
+    theme_sunset: 'மாலை', theme_forest: 'காடு', theme_royal: 'அரச',
+    goodMorning: 'காலை வணக்கம்', goodAfternoon: 'வணக்கம்', goodEvening: 'மாலை வணக்கம்',
+    tipDueIn: 'இங்கே நிலுவை உள்ளது', tipRemind: 'நிலுவைகளை பார்க்க தட்டவும்',
+    tipVacantBeds: 'படுக்கைகள் காலியாக உள்ளன — நிரப்பி அதிகம் சம்பாதிக்கவும்',
+    tipAllGood: 'இன்று எல்லாம் சிறப்பாக உள்ளது!',
+    installApp: 'போனில் ஆப்பை நிறுவவும்', shareSummary: 'வணிக சுருக்கத்தை அனுப்பவும்', topPending: 'அதிக நிலுவைகள்'
   },
 
   /* ---------- Kannada ---------- */
@@ -499,7 +546,18 @@ const T = {
     salaryDue: 'ಸಂಬಳ ಬಾಕಿ', salaryRecorded: 'ಸಂಬಳ ದಾಖಲಾಯಿತು ✔', forMonth: 'ಯಾವ ತಿಂಗಳಿಗೆ',
     monthlySalaries: 'ತಿಂಗಳ ಸಂಬಳಗಳು', lastPaid: 'ಕೊನೆಯ ಬಾರಿ ಕೊಟ್ಟದ್ದು',
     noStaffYet: 'ಇನ್ನೂ ಸಿಬ್ಬಂದಿ ಇಲ್ಲ — ಅಡುಗೆಯವರು ಅಥವಾ ಕಾವಲುಗಾರರನ್ನು ಸೇರಿಸಿ',
-    noSalaryPayments: 'ಇನ್ನೂ ಸಂಬಳ ಪಾವತಿಗಳಿಲ್ಲ'
+    noSalaryPayments: 'ಇನ್ನೂ ಸಂಬಳ ಪಾವತಿಗಳಿಲ್ಲ',
+    searchEverything: 'ಬಾಡಿಗೆದಾರ, ಫೋನ್, ಕೊಠಡಿ ಹುಡುಕಿ…',
+    searchHint: 'ಹೆಸರು, ಫೋನ್ ನಂಬರ್ ಅಥವಾ ಕೊಠಡಿ ಟೈಪ್ ಮಾಡಿ.',
+    noResults: 'ಏನೂ ಸಿಗಲಿಲ್ಲ',
+    themeTitle: 'ಆ್ಯಪ್ ಥೀಮ್', themeSub: 'ಒಂದು ಬಣ್ಣ ಆರಿಸಿ — ಇಡೀ ಆ್ಯಪ್ ತಕ್ಷಣ ಬದಲಾಗುತ್ತದೆ',
+    theme_daylight: 'ಹಗಲು', theme_midnight: 'ಮಧ್ಯರಾತ್ರಿ', theme_ocean: 'ಸಮುದ್ರ',
+    theme_sunset: 'ಸೂರ್ಯಾಸ್ತ', theme_forest: 'ಕಾಡು', theme_royal: 'ರಾಜ',
+    goodMorning: 'ಶುಭೋದಯ', goodAfternoon: 'ನಮಸ್ಕಾರ', goodEvening: 'ಶುಭ ಸಂಜೆ',
+    tipDueIn: 'ಇಲ್ಲಿ ಬಾಕಿ ಇದೆ', tipRemind: 'ಬಾಕಿ ನೋಡಲು ಒತ್ತಿ',
+    tipVacantBeds: 'ಹಾಸಿಗೆಗಳು ಖಾಲಿ ಇವೆ — ತುಂಬಿಸಿ ಹೆಚ್ಚು ಗಳಿಸಿ',
+    tipAllGood: 'ಇಂದು ಎಲ್ಲವೂ ಚೆನ್ನಾಗಿದೆ!',
+    installApp: 'ಫೋನ್‌ನಲ್ಲಿ ಆ್ಯಪ್ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ', shareSummary: 'ವ್ಯಾಪಾರ ಸಾರಾಂಶ ಕಳುಹಿಸಿ', topPending: 'ಹೆಚ್ಚು ಬಾಕಿ'
   },
 
   /* ---------- Marathi ---------- */
@@ -577,7 +635,18 @@ const T = {
     salaryDue: 'पगार बाकी', salaryRecorded: 'पगार नोंदवला ✔', forMonth: 'कोणत्या महिन्याचा',
     monthlySalaries: 'मासिक पगार', lastPaid: 'शेवटचा दिला',
     noStaffYet: 'अजून कर्मचारी नाहीत — स्वयंपाकी किंवा रखवालदार जोडा',
-    noSalaryPayments: 'अजून पगार भरणा नाही'
+    noSalaryPayments: 'अजून पगार भरणा नाही',
+    searchEverything: 'भाडेकरू, फोन, खोली शोधा…',
+    searchHint: 'नाव, फोन नंबर किंवा खोली लिहा.',
+    noResults: 'काही सापडलं नाही',
+    themeTitle: 'अ‍ॅप थीम', themeSub: 'एक रंग निवडा — संपूर्ण अ‍ॅप लगेच बदलेल',
+    theme_daylight: 'दिवस', theme_midnight: 'मध्यरात्र', theme_ocean: 'समुद्र',
+    theme_sunset: 'सूर्यास्त', theme_forest: 'जंगल', theme_royal: 'राजेशाही',
+    goodMorning: 'सुप्रभात', goodAfternoon: 'नमस्कार', goodEvening: 'शुभ संध्याकाळ',
+    tipDueIn: 'इथे बाकी आहे', tipRemind: 'बाकी पाहण्यासाठी दाबा',
+    tipVacantBeds: 'बेड रिकामे आहेत — भरा आणि जास्त कमवा',
+    tipAllGood: 'आज सगळं छान आहे!',
+    installApp: 'फोनवर अ‍ॅप इन्स्टॉल करा', shareSummary: 'व्यवसाय सारांश पाठवा', topPending: 'सर्वात जास्त बाकी'
   }
 };
 

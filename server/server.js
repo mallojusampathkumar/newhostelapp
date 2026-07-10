@@ -302,11 +302,12 @@ app.post('/api/auth/login', (req, res) => {
 app.get('/api/me', authAny, (req, res) => res.json({ user: publicUser(req.user) }));
 
 app.put('/api/me', auth, (req, res) => {
-  const { name, email, language, businessType } = req.body || {};
+  const { name, email, language, businessType, theme } = req.body || {};
   if (name) req.user.name = String(name).trim();
   if (email !== undefined) req.user.email = email;
   if (language) req.user.language = language;
   if (businessType) req.user.businessType = businessType;
+  if (theme !== undefined) req.user.theme = String(theme || '').slice(0, 24);
   store.save();
   res.json({ user: publicUser(req.user) });
 });

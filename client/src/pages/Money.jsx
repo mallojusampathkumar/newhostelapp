@@ -4,6 +4,7 @@ import { useLang } from '../i18n.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import TenantSheet from '../components/TenantSheet.jsx';
 import { downloadCsv, printHtml, receiptHtml } from '../util.js';
+import { RupeeCount } from '../fx.jsx';
 import { useToast } from '../App.jsx';
 
 const EXPENSE_CATS = [
@@ -58,6 +59,26 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
     ['Date', 'Category', 'Amount', 'Note'],
     ...(expenses || []).map(e => [e.date, e.category, e.amount, e.note])
   ]);
+  // one-tap business digest for WhatsApp (send to yourself, partner or accountant)
+  const shareSummary = () => {
+    const propName = propId ? properties.find(p => p.id === propId)?.name : t('allProperties');
+    const occ = propId
+      ? properties.find(p => p.id === propId)?.stats
+      : totals && { occupied: totals.occupied, totalBeds: totals.beds };
+    const top = (dues || []).slice()
+      .sort((a, b) => b.dues.dueAmount - a.dues.dueAmount)
+      .slice(0, 5)
+      .map((r, i) => `${i + 1}. ${r.tenant.name} (${r.roomName || '—'}) — ₹${r.dues.dueAmount.toLocaleString('en-IN')}`)
+      .join('\n');
+    const text = `🏠 *StaySathi* · ${new Date().toLocaleDateString('en-IN')}\n📍 ${propName}\n\n` +
+      `✅ ${t('collected')} (${t('thisMonth')}): *${rupee(collected)}*\n` +
+      `⚠️ ${t('duesTitle')}: *${rupee(totalDue)}* (${(dues || []).length})\n` +
+      (occ ? `🛏️ ${t('occupancy')}: ${occ.occupied}/${occ.totalBeds}\n` : '') +
+      (top ? `\n📋 ${t('topPending')}:\n${top}\n` : '') +
+      `\n— StaySathi`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
   const printPayment = (p) => {
     const propName = properties.find(x => x.id === p.propertyId)?.name || '';
     printHtml(`Receipt ${p.receiptNo}`, receiptHtml({ ...p, propertyName: propName }));
@@ -86,16 +107,17 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
           <option value="">🏠 {t('allProperties')}</option>
           {properties.map(p => <option key={p.id} value={p.id}>{p.icon} {p.name}</option>)}
         </select>
+        <button className="icon-btn" style={{ flexShrink: 0 }} title={t('shareSummary')} onClick={shareSummary}>📤</button>
       </div>
 
       <div className="money-hero mt16">
         <div className="money-tile gain tap" onClick={() => setSeg('payments')}>
           <div className="muted small">✅ {t('collected')} · {t('thisMonth')}</div>
-          <div className="amt">{rupee(collected)}</div>
+          <div className="amt"><RupeeCount value={collected || 0} /></div>
         </div>
         <div className="money-tile loss tap" onClick={() => setSeg('dues')}>
           <div className="muted small">⚠️ {t('duesTitle')}</div>
-          <div className="amt">{rupee(totalDue)}</div>
+          <div className="amt"><RupeeCount value={totalDue} /></div>
         </div>
       </div>
 
@@ -203,7 +225,7 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
           <div className="stat-strip mt8">
             <div className="stat-tile"><div className="v">🛏️ {report.occupancy?.occupied}/{report.occupancy?.beds}</div><div className="k">{t('occupancyRate')} · {report.occupancy?.rate}%</div></div>
             <div className="stat-tile"><div className="v" style={{ color: C_PAID }}>{rupee(collected)}</div><div className="k">{t('collected')}</div></div>
-            <div className="stat-tile"><div className="v" style={{ color: totalDue ? '#c53030' : C_PAID }}>{rupee(totalDue)}</div><div className="k">{t('totalPendingDues')}</div></div>
+            <div className="stat-tile"><div className="v" style={{ color: totalDue ? 'var(--red-strong)' : C_PAID }}>{rupee(totalDue)}</div><div className="k">{t('totalPendingDues')}</div></div>
             <div className="stat-tile"><div className="v">🧑 {propId ? properties.find(p => p.id === propId)?.stats.tenants : totals?.tenants}</div><div className="k">{t('activeTenants')}</div></div>
           </div>
 
@@ -216,7 +238,7 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
                 <div className="row spread mt8 small"><span className="muted">{t('occupied')}</span><b>{report.occupancy?.occupied}</b></div>
                 <div className="row spread small"><span className="muted">{t('vacant')}</span><b>{report.occupancy?.vacant}</b></div>
                 <div className="row spread mt8"><span className="muted small">🎯 {t('collectionRate')}</span>
-                  <b style={{ color: rate >= 80 ? C_PAID : rate >= 50 ? 'var(--gold)' : '#c53030' }}>{rate}%</b></div>
+                  <b style={{ color: rate >= 80 ? C_PAID : rate >= 50 ? 'var(--gold)' : 'var(--red-strong)' }}>{rate}%</b></div>
                 <div className="progress mt8"><div style={{ width: `${rate}%` }} /></div>
               </div>
             </div>
@@ -274,7 +296,7 @@ export default function Money({ overview, refreshOverview, initialSeg }) {
               {report.series.slice(-1).map(s => (
                 <div key={s.month} className="row spread">
                   <span className="muted">{t('netProfit')} · {t('thisMonth')}</span>
-                  <b style={{ color: s.profit >= 0 ? 'var(--green2)' : '#c53030', fontSize: 20 }}>{rupee(s.profit)}</b>
+                  <b style={{ color: s.profit >= 0 ? 'var(--green2)' : 'var(--red-strong)', fontSize: 20 }}>{rupee(s.profit)}</b>
                 </div>
               ))}
             </div>

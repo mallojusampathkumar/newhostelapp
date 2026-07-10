@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { get, post, put, del } from '../api.js';
 import { useLang, LANGS } from '../i18n.jsx';
+import { useTheme, THEMES } from '../theme.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import { useToast } from '../App.jsx';
 
@@ -11,7 +12,22 @@ export default function More({ overview, user, setUser, onLogout }) {
   const [meters, setMeters] = useState(null);
   const [modal, setModal] = useState(null);
   const [propId, setPropId] = useState('');
+  const [canInstall, setCanInstall] = useState(() => !!window.__ssInstallPrompt);
   const properties = overview?.properties || [];
+
+  useEffect(() => {
+    const h = () => setCanInstall(true);
+    window.addEventListener('ss-can-install', h);
+    return () => window.removeEventListener('ss-can-install', h);
+  }, []);
+
+  const installApp = async () => {
+    const prompt = window.__ssInstallPrompt;
+    if (!prompt) return;
+    prompt.prompt();
+    const { outcome } = await prompt.userChoice;
+    if (outcome === 'accepted') { window.__ssInstallPrompt = null; setCanInstall(false); toast('📲 ✔'); }
+  };
 
   const loadMeters = useCallback(() => {
     get(`/meters${propId ? `?propertyId=${propId}` : ''}`).then(d => setMeters(d.meters)).catch(() => {});
@@ -85,7 +101,15 @@ export default function More({ overview, user, setUser, onLogout }) {
           <div className="avatar" style={{ background: 'linear-gradient(135deg,#f39c12,#fdaa3d)' }}>⚡</div>
           <b className="grow" style={{ textAlign: 'left' }}>{t('meters')}</b><span>›</span>
         </button>
+        {canInstall && (
+          <button className="list-item btn-block" style={{ width: '100%' }} onClick={installApp}>
+            <div className="avatar" style={{ background: 'linear-gradient(135deg,#0984e3,#74b9ff)' }}>📲</div>
+            <b className="grow" style={{ textAlign: 'left' }}>{t('installApp')}</b><span>›</span>
+          </button>
+        )}
       </div>
+
+      <ThemePickerCard />
 
       <div className="card mt16">
         <b>🗣️ {t('chooseLanguage')}</b>
@@ -104,6 +128,33 @@ export default function More({ overview, user, setUser, onLogout }) {
       {modal === 'editProfile' && (
         <EditProfileModal user={user} setUser={setUser} onClose={() => setModal(null)} />
       )}
+    </div>
+  );
+}
+
+/* live theme switcher — tap a mood, the whole app repaints instantly */
+function ThemePickerCard() {
+  const { t } = useLang();
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="card mt16">
+      <b>🎨 {t('themeTitle')}</b>
+      <div className="muted small mt8">{t('themeSub')}</div>
+      <div className="theme-grid mt16">
+        {THEMES.map(th => (
+          <button
+            key={th.id}
+            className={`theme-tile ${theme === th.id ? 'active' : ''}`}
+            onClick={() => setTheme(th.id)}
+          >
+            <span className="theme-preview" style={{ background: th.swatch[1] }}>
+              <i style={{ background: th.swatch[0] }} />
+              <i style={{ background: th.swatch[0], opacity: .55 }} />
+            </span>
+            <span className="theme-name">{th.icon} {t(`theme_${th.id}`)}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
