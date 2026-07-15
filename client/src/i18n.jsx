@@ -47,6 +47,19 @@ const T = {
     pricePro: '₹99 / month', priceProSub: 'Unlimited properties & beds · reminders · reports',
     priceNote: 'Cheaper than one cup of tea per day. Cancel anytime.',
     howTitle: 'Learn in 2 minutes',
+    // landing
+    lpNavFeatures: 'Features', lpNavHow: 'How it works', lpNavPricing: 'Pricing',
+    lpBadge: 'Made for hostels, PGs & flats',
+    lpStatL1: 'Indian languages', lpStatL2: 'minutes to set up', lpStatL3: 'cost to start', lpStatL4: 'tenant portal',
+    lpHowTitle: 'Up and running in three steps',
+    lpHowSub: 'No training, no spreadsheets, no accountant needed.',
+    lpHow1t: 'Create your property', lpHow1d: 'Answer four quick questions — floors, rooms, beds, rent. StaySathi builds the whole structure for you.',
+    lpHow2t: 'Add your tenants', lpHow2d: 'Type them in, import from Excel, or snap a photo of your paper register — Smart Import reads it for you.',
+    lpHow3t: 'Collect & relax', lpHow3d: 'See who paid at a glance, send WhatsApp reminders in one tap and share receipts instantly.',
+    lpCtaTitle: 'Run your property the easy way',
+    lpCtaSub: 'Join hostel, PG and flat owners who manage rooms, tenants and rent from one simple app — in their own language.',
+    lpFootProduct: 'Product', lpFootLangs: 'Languages', lpFootContact: 'Contact',
+    lpDashLabel: 'Dashboard',
     // nav
     navHome: 'Home', navMoney: 'Money', navPeople: 'People', navAlerts: 'Alerts', navMore: 'More',
     // bubbles

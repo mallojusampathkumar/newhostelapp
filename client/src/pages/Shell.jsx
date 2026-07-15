@@ -62,9 +62,14 @@ export default function Shell({ user, setUser, onLogout }) {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="logo" style={{ fontSize: 20 }}><span className="orb" style={{ width: 36, height: 36, fontSize: 19 }}>🏠</span>{t('appName')}</div>
+        <div className="logo"><span className="orb">🏠</span>{t('appName')}</div>
+        <button className="search-pill" onClick={() => setSearch(true)}>
+          <span aria-hidden="true">🔍</span>
+          {t('searchEverything')}
+          <kbd>{navigator.platform?.includes('Mac') ? '⌘ K' : 'Ctrl K'}</kbd>
+        </button>
         <div className="row" style={{ gap: 8 }}>
-          <button className="icon-btn" title={t('searchEverything')} onClick={() => setSearch(true)}>🔍</button>
+          <button className="icon-btn search-tap" title={t('searchEverything')} onClick={() => setSearch(true)}>🔍</button>
           <button className="icon-btn" title={t('themeTitle')} onClick={flipTheme}>{isDark ? '☀️' : '🌙'}</button>
           <button className="chip" onClick={() => go('more')}>🙍 {user.name.split(' ')[0]}</button>
         </div>
@@ -82,6 +87,7 @@ export default function Shell({ user, setUser, onLogout }) {
       {tab === 'more' && <More overview={overview} user={user} setUser={setUser} onLogout={onLogout} refreshOverview={refresh} />}
 
       <nav className="bottom-nav">
+        <div className="nav-brand" aria-hidden="true"><span className="orb">🏠</span>{t('appName')}</div>
         {tabs.map(([key, ico, label, badge]) => (
           <button key={key} className={`nav-item ${tab === key ? 'active' : ''}`} onClick={() => go(key)}>
             <span className="ico" style={{ position: 'relative' }}>

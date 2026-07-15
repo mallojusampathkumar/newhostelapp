@@ -80,7 +80,7 @@ function Root() {
   const logout = () => { setToken(null); setUser(null); setView('landing'); };
 
   if (view === 'boot') {
-    return <div className="auth-wrap"><div className="bubble hero-bubble"><span className="ico">🏠</span><span className="name">StaySathi</span></div></div>;
+    return <div className="boot-screen"><span className="orb">🏠</span><b>StaySathi</b></div>;
   }
 
   return (

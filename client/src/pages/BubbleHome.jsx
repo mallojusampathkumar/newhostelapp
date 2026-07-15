@@ -341,7 +341,7 @@ function PinModal({ prop, onOk, onClose }) {
       <div className={`pin-dots ${shake ? 'shake' : ''}`}>
         {[0, 1, 2, 3].map(i => <span key={i} className={`pin-dot ${i < pin.length ? 'on' : ''}`} />)}
       </div>
-      {shake && <p className="center small" style={{ color: '#ffb3af', marginBottom: 10 }}>{t('wrongPin')}</p>}
+      {shake && <p className="center small" style={{ color: 'var(--red-strong)', marginBottom: 10 }}>{t('wrongPin')}</p>}
       <div className="pin-pad">
         {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((k, i) =>
           k === ''

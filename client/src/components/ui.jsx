@@ -10,8 +10,9 @@ export function Modal({ title, icon, onClose, children }) {
   }, [onClose]);
   return (
     <div className="modal-backdrop" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal">
+      <div className="modal" role="dialog" aria-modal="true">
         <div className="drag" />
+        <button type="button" className="modal-x" aria-label="Close" onClick={onClose}>✕</button>
         {title && <h3>{icon && <span>{icon}</span>}{title}</h3>}
         {children}
       </div>
@@ -23,8 +24,15 @@ export function Field({ label, children }) {
   return <label className="field"><span>{label}</span>{children}</label>;
 }
 
-export function Empty({ icon, text }) {
-  return <div className="empty"><span className="ico">{icon}</span>{text}</div>;
+export function Empty({ icon, text, hint, children }) {
+  return (
+    <div className="empty">
+      <span className="ico">{icon}</span>
+      <b>{text}</b>
+      {hint && <div className="small">{hint}</div>}
+      {children}
+    </div>
+  );
 }
 
 export function LangPicker({ compact }) {
