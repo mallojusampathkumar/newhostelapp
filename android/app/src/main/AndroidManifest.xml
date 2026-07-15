@@ -10,7 +10,10 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.StaySathi">
 
-        <!-- Trusted Web Activity launcher. Opens the PWA full-screen. -->
+        <!-- Trusted Web Activity launcher. Opens the PWA full-screen.
+             FocusActivity / WebViewFallbackActivity are declared by the
+             androidbrowserhelper library itself — do not re-declare them here
+             (duplicate declarations cause "Manifest merger failed"). -->
         <activity
             android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
             android:exported="true">
@@ -34,8 +37,17 @@
                 android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR"
                 android:resource="@color/backgroundColor" />
             <meta-data
+                android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION"
+                android:value="300" />
+            <meta-data
                 android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY"
-                android:value="app.staysathi.twa.fileprovider" />
+                android:value="${applicationId}.fileprovider" />
+
+            <!-- No Chrome / no Custom-Tabs browser on the device?
+                 Open inside a WebView instead of failing. -->
+            <meta-data
+                android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY"
+                android:value="webview" />
 
             <!-- Digital Asset Links statement — proves this app owns the domain. -->
             <meta-data
@@ -56,16 +68,10 @@
             </intent-filter>
         </activity>
 
-        <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
-
-        <activity
-            android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|screenLayout"
-            android:exported="false" />
-
+        <!-- Shares the splash image with the browser during launch. -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="app.staysathi.twa.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:grantUriPermissions="true"
             android:exported="false">
             <meta-data

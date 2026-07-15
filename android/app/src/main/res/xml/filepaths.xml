@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Must expose twa_splash/ — androidbrowserhelper saves the splash image
+     there and shares it with the browser via the FileProvider. -->
 <paths>
-    <files-path name="app_images" path="images/" />
-    <cache-path name="app_cache" path="/" />
+    <files-path path="twa_splash/" name="twa_splash" />
 </paths>
