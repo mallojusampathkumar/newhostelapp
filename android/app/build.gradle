@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+}
+
+// ---------------------------------------------------------------------------
+// Release signing.
+// Secrets are NEVER committed. They come from either:
+//   1) android/keystore.properties  (local dev — gitignored), or
+//   2) environment variables         (CI — see .github/workflows/android.yml)
+// Keys: storeFile, storePassword, keyAlias, keyPassword
+// ---------------------------------------------------------------------------
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+def ksStoreFile = keystoreProps['storeFile']    ?: System.getenv('ANDROID_KEYSTORE_FILE')
+def ksStorePass = keystoreProps['storePassword'] ?: System.getenv('ANDROID_KEYSTORE_PASSWORD')
+def ksKeyAlias  = keystoreProps['keyAlias']      ?: System.getenv('ANDROID_KEY_ALIAS')
+def ksKeyPass   = keystoreProps['keyPassword']   ?: System.getenv('ANDROID_KEY_PASSWORD')
+def hasSigning  = ksStoreFile != null && file(ksStoreFile).exists()
+
+android {
+    namespace 'app.staysathi.twa'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'app.staysathi.twa'
+        minSdk 21
+        targetSdk 34
+
+        // Bump these on every Play Store release.
+        // versionCode MUST increase by at least 1 for each upload.
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (hasSigning) {
+                storeFile file(ksStoreFile)
+                storePassword ksStorePass
+                keyAlias ksKeyAlias
+                keyPassword ksKeyPass
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // TWA is a thin shell; keep it small but don't strip the support lib.
+            minifyEnabled false
+            signingConfig hasSigning ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Google's official Trusted Web Activity helper. It launches the PWA
+    // full-screen (no browser chrome) and handles Digital Asset Links.
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

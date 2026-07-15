@@ -1,0 +1,15 @@
+# Android / Gradle build output
+.gradle/
+build/
+app/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local SDK location (provided by Android Studio / CI, machine-specific)
+local.properties
+
+# Signing secrets — NEVER commit these
+keystore.properties
+*.keystore
+*.jks
