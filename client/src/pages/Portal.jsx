@@ -35,7 +35,7 @@ export default function Portal({ token }) {
     );
   }
   if (!data) {
-    return <div className="auth-wrap"><div className="bubble hero-bubble"><span className="ico">🏠</span><span className="name">StaySathi</span></div></div>;
+    return <div className="boot-screen"><span className="orb">🏠</span><b>StaySathi</b></div>;
   }
 
   const { tenant, property, owner, roomName, dues, payments, notices, complaints } = data;

@@ -40,7 +40,10 @@ export default function Auth({ mode, onAuthed, onSwitch, onBack }) {
           <button type="button" className="btn btn-sm btn-ghost" onClick={onBack}>← {t('back')}</button>
           <LangPicker compact />
         </div>
-        <h2>{isLogin ? <>👋 {t('welcomeBack')}</> : <>🚀 {t('signup')}</>}</h2>
+        <div className="logo" style={{ fontSize: 17, marginBottom: 18 }}>
+          <span className="orb" style={{ width: 34, height: 34, fontSize: 17, borderRadius: 10 }}>🏠</span>{t('appName')}
+        </div>
+        <h2>{isLogin ? <>{t('welcomeBack')}</> : <>{t('signup')}</>}</h2>
         <p className="sub">{isLogin ? t('loginSub') : t('signupSub')}</p>
 
         {!isLogin && (
