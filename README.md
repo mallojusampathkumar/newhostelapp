@@ -47,6 +47,7 @@ every time that property is opened.
 | 🎉 Celebrations | Confetti when rent is collected, animated count-up money figures, shimmer loading skeletons |
 | 📲 Install as app | Full PWA: install on any phone from More → "Install App", opens instantly, app shell works offline |
 | 📤 Business summary | One tap on Money → 📤 shares a WhatsApp digest — collected, dues, occupancy & top 5 pending tenants |
+| 🤖 Android app | Ships to the **Play Store** as a Trusted Web Activity — one codebase, native install. See [PLAYSTORE.md](./PLAYSTORE.md) |
 
 ## 🏃 Run it
 
@@ -143,6 +144,17 @@ fly deploy
 - **`.github/workflows/deploy.yml`** — on push to `main`: builds and pushes a
   versioned image to **GHCR** (`ghcr.io/<owner>/<repo>`), then triggers a Render
   deploy if a `RENDER_DEPLOY_HOOK_URL` secret is set.
+
+### 📲 Android app / Play Store
+
+StaySathi is packaged for Google Play as a **Trusted Web Activity** — a thin
+native shell (in [`android/`](./android)) that opens the live PWA full-screen.
+One web deploy updates every installed app. The Express server serves
+`/.well-known/assetlinks.json` (from `TWA_SHA256_FINGERPRINTS`) so the app runs
+without a browser toolbar, and a GitHub Actions workflow
+(`.github/workflows/android.yml`) builds the signed `.aab`.
+
+**Full step-by-step: [PLAYSTORE.md](./PLAYSTORE.md).**
 
 ### Repo layout (DevOps additions)
 

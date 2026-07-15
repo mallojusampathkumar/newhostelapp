@@ -35,6 +35,28 @@ app.get(['/health', '/healthz', '/api/health'], (req, res) => {
   });
 });
 
+// Digital Asset Links — proves the Android TWA (Play Store app) is allowed to
+// open this domain full-screen without a browser toolbar. The Android package
+// name and its signing-cert SHA-256 fingerprint(s) come from env vars so no
+// secret is baked in. Get the fingerprint from Play Console → Setup → App
+// integrity → App signing (and Upload key) after your first upload; multiple
+// values can be comma- or space-separated. See PLAYSTORE.md.
+const TWA_PACKAGE = process.env.TWA_PACKAGE_NAME || 'app.staysathi.twa';
+const TWA_FINGERPRINTS = (process.env.TWA_SHA256_FINGERPRINTS || '')
+  .split(/[\s,]+/)
+  .map(s => s.trim())
+  .filter(Boolean);
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  res.json([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: {
+      namespace: 'android_app',
+      package_name: TWA_PACKAGE,
+      sha256_cert_fingerprints: TWA_FINGERPRINTS
+    }
+  }]);
+});
+
 /* ---------------- auth helpers ---------------- */
 
 function hashPassword(pw) {

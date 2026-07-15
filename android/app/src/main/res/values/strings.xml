@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="appName">StaySathi</string>
+
+    <!-- ================================================================= -->
+    <!-- The ONE place to change the domain. Update all four if you switch  -->
+    <!-- domains, then update android/assetlinks + the server env var.      -->
+    <!-- ================================================================= -->
+    <string name="hostName" translatable="false">staysathi.app</string>
+    <string name="launchUrl" translatable="false">https://staysathi.app/</string>
+
+    <!-- Declares that this app is linked to the website above. -->
+    <string name="assetStatements" translatable="false">
+        [{
+            \"relation\": [\"delegate_permission/common.handle_all_urls\"],
+            \"target\": {
+                \"namespace\": \"web\",
+                \"site\": \"https://staysathi.app\"
+            }
+        }]
+    </string>
+</resources>
