@@ -551,6 +551,47 @@ button.chip:hover { border-color: var(--border2); }
   color: var(--gold);
   font-weight: 600; font-size: 13px; text-align: center;
   padding: 8px 14px;
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+}
+.readonly-banner .btn { min-height: 34px; padding: 5px 14px; }
+
+/* trial countdown pill in the topbar */
+.trial-pill {
+  background: var(--orange-soft); border-color: var(--orange-brd); color: var(--gold);
+  font-weight: 700; white-space: nowrap;
+}
+
+/* ---------- subscription sheet ---------- */
+.sub-hero {
+  border-radius: var(--r-md, 16px);
+  padding: 18px;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+.sub-hero.trial { background: var(--orange-soft); border-color: var(--orange-brd); }
+.sub-hero.premium { background: var(--green-soft); border-color: var(--green-brd); }
+.sub-hero.expired { background: var(--red-soft); border-color: var(--red-brd); }
+.sub-hero-ico { font-size: 40px; line-height: 1; margin-bottom: 6px; }
+.sub-hero p { margin: 0; }
+
+.sub-price { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; color: var(--green2); font-variant-numeric: tabular-nums; }
+.sub-price small { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.sub-benefits { list-style: none; margin: 0; padding: 0; }
+.sub-benefits li { font-size: 13.5px; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.sub-benefits li:last-child { border-bottom: none; }
+
+.upi-box {
+  background: var(--surface2);
+  border: 1px dashed var(--border2);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.upi-id {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 14.5px; font-weight: 700; letter-spacing: 0.01em;
+  word-break: break-all;
 }
 
 /* ---------- page ---------- */

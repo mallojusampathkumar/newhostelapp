@@ -25,7 +25,9 @@ const EMPTY = {
   activities: [],
   notifications: [],
   paymentClaims: [],
-  settings: { autoApprove: true, trialDays: 30 },
+  subscriptionRequests: [],
+  subscriptionPayments: [],
+  settings: { autoApprove: true, trialDays: 7, monthlyPrice: 99, upiId: '', upiName: '' },
   secret: null
 };
 

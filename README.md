@@ -46,8 +46,24 @@ every time that property is opened.
 | 🤖 Sathi insights | Daily greeting, animated collection-rate ring, occupancy and a smart "what to do next" tip |
 | 🎉 Celebrations | Confetti when rent is collected, animated count-up money figures, shimmer loading skeletons |
 | 📲 Install as app | Full PWA: install on any phone from More → "Install App", opens instantly, app shell works offline |
+| 💳 Subscription | 7-day full-access free trial → read-only mode until subscribed · ₹99/month via UPI ("I have paid" → admin verifies & activates) |
+| 🛡️ Super-admin portal | Overview (revenue, expiring plans), owners with trial/premium dates, one-tap subscription ON/OFF, payment-request inbox, billing settings |
+| 🗄️ Data backup | One-tap full JSON backup of all your data from More → Download Backup (works even in read-only mode) |
+| 📲 Owner UPI | Add your UPI ID to your profile — it is appended to every WhatsApp rent reminder |
 | 📤 Business summary | One tap on Money → 📤 shares a WhatsApp digest — collected, dues, occupancy & top 5 pending tenants |
 | 🤖 Android app | Ships to the **Play Store** as a Trusted Web Activity — one codebase, native install. See [PLAYSTORE.md](./PLAYSTORE.md) |
+
+## 💳 Plans & subscription flow
+
+- Every new owner gets a **7-day free trial** with full access (trial length is
+  configurable in Admin → Settings).
+- When the trial ends the app drops to **read-only mode** — all data stays
+  visible and safe, but writes are blocked until the owner subscribes.
+- Subscription is **₹99 / month** (price configurable). The owner pays to the
+  platform UPI ID from the in-app subscription sheet and taps
+  **"I have paid — Activate"**; the super admin verifies the payment in
+  **Admin → Subscriptions** and activates it in one tap. Admins can also turn a
+  subscription on/off directly from any owner's profile.
 
 ## 🏃 Run it
 
