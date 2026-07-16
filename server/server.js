@@ -12,6 +12,16 @@ store.load();
 const db = store.db;
 if (!db.secret) { db.secret = crypto.randomBytes(32).toString('hex'); store.save(); }
 
+// settings migration: pricing/UPI fields for older data files, and a one-time
+// switch of the default trial from 30 → 7 days (admin can still change it later)
+db.settings = db.settings || {};
+if (db.settings.monthlyPrice === undefined) db.settings.monthlyPrice = 99;
+if (db.settings.upiId === undefined) db.settings.upiId = '';
+if (db.settings.upiName === undefined) db.settings.upiName = '';
+if (!db.settings.trial7Migrated) { db.settings.trialDays = 7; db.settings.trial7Migrated = true; store.save(); }
+db.subscriptionRequests = db.subscriptionRequests || [];
+db.subscriptionPayments = db.subscriptionPayments || [];
+
 app.use(express.json({ limit: '15mb' }));
 
 // permissive CORS so the Vite dev server / mobile shells can call us
@@ -120,6 +130,18 @@ function auth(req, res, next) {
     if (status === 'rejected') return res.status(403).json({ error: 'Your account was not approved. Please contact support.', code: 'blocked' });
     if (req.method !== 'GET' && isReadonly(u)) {
       return res.status(403).json({ error: 'Your plan has expired — the app is in read-only mode. Upgrade to continue.', code: 'readonly' });
+    }
+    next();
+  });
+}
+
+// logged in + approved, but read-only is fine — used for profile preferences
+// and billing so an expired owner can still upgrade or switch language
+function authActive(req, res, next) {
+  authAny(req, res, () => {
+    const status = req.user.status || 'active';
+    if (req.user.role !== 'admin' && status !== 'active') {
+      return res.status(403).json({ error: 'Your account is not active. Please contact support.', code: status === 'pending' ? 'pending' : 'blocked' });
     }
     next();
   });
@@ -287,7 +309,7 @@ app.post('/api/auth/signup', (req, res) => {
   if (String(password).length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
   if (db.users.find(u => u.phone === String(phone))) return res.status(409).json({ error: 'This phone number is already registered. Please login.' });
   const settings = db.settings || {};
-  const trialDays = Number(settings.trialDays) || 30;
+  const trialDays = Number(settings.trialDays) || 7;
   const user = {
     id: store.id('usr'),
     name: String(name).trim(),
@@ -323,13 +345,14 @@ app.post('/api/auth/login', (req, res) => {
 
 app.get('/api/me', authAny, (req, res) => res.json({ user: publicUser(req.user) }));
 
-app.put('/api/me', auth, (req, res) => {
-  const { name, email, language, businessType, theme } = req.body || {};
+app.put('/api/me', authActive, (req, res) => {
+  const { name, email, language, businessType, theme, upiId } = req.body || {};
   if (name) req.user.name = String(name).trim();
   if (email !== undefined) req.user.email = email;
   if (language) req.user.language = language;
   if (businessType) req.user.businessType = businessType;
   if (theme !== undefined) req.user.theme = String(theme || '').slice(0, 24);
+  if (upiId !== undefined) req.user.upiId = String(upiId || '').trim().slice(0, 60);
   store.save();
   res.json({ user: publicUser(req.user) });
 });
@@ -720,9 +743,126 @@ app.get('/api/tenants/:id/reminder', auth, (req, res) => {
   const prop = tenant && db.properties.find(p => p.id === tenant.propertyId && p.ownerId === req.user.id);
   if (!prop) return res.status(404).json({ error: 'Tenant not found' });
   const d = tenantDues(tenant);
-  const text = `Namaste ${tenant.name} 🙏\nThis is a friendly rent reminder from ${prop.name}.\nPending: ₹${d.dueAmount} (${d.unpaidMonths.join(', ')})\nPlease pay at your earliest convenience. Thank you!\n— ${req.user.name}, StaySathi`;
+  const upiLine = req.user.upiId ? `\nPay via UPI: ${req.user.upiId}` : '';
+  const text = `Namaste ${tenant.name} 🙏\nThis is a friendly rent reminder from ${prop.name}.\nPending: ₹${d.dueAmount} (${d.unpaidMonths.join(', ')})${upiLine}\nPlease pay at your earliest convenience. Thank you!\n— ${req.user.name}, StaySathi`;
   logActivity(req.user.id, prop.id, '🔔', `Rent reminder sent to ${tenant.name}`);
   res.json({ text, phone: tenant.phone, dueAmount: d.dueAmount });
+});
+
+/* ---------------- subscription & billing ---------------- */
+// Model: every new owner gets a full-featured free trial (default 7 days).
+// When it ends the app drops to read-only until they subscribe (₹99 / month).
+// Payment is UPI + manual confirmation: the owner pays to the platform UPI id,
+// taps "I have paid", and the super admin activates it from the admin portal
+// (or activates it directly without a request).
+
+function activateSubscription(user, months, source, txnRef = '', requestId = null) {
+  const n = Math.min(Math.max(Number(months) || 1, 1), 24);
+  const now = new Date();
+  const current = user.plan === 'premium' && user.planExpiresAt && new Date(user.planExpiresAt) > now
+    ? new Date(user.planExpiresAt) : now;
+  const expires = new Date(current);
+  expires.setMonth(expires.getMonth() + n);
+  user.plan = 'premium';
+  user.planExpiresAt = expires.toISOString();
+  const price = Number(db.settings.monthlyPrice) || 99;
+  const record = {
+    id: store.id('sub'),
+    userId: user.id, userName: user.name, phone: user.phone,
+    months: n, amount: price * n, source, txnRef: txnRef || '',
+    requestId, expiresAt: user.planExpiresAt,
+    createdAt: new Date().toISOString()
+  };
+  db.subscriptionPayments.unshift(record);
+  notify(user.id, null, 'account', '⭐',
+    `Subscription active! Full access till ${expires.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}.`);
+  logActivity(user.id, null, '⭐', `Subscription activated for ${n} month${n > 1 ? 's' : ''}`);
+  return record;
+}
+
+function openSubRequest(userId) {
+  return db.subscriptionRequests.find(r => r.userId === userId && r.status === 'open');
+}
+
+// everything the owner's subscription screen needs, in one call.
+// Works in read-only mode on purpose — an expired owner must be able to pay.
+app.get('/api/billing', authActive, (req, res) => {
+  const u = req.user;
+  const s = db.settings;
+  res.json({
+    access: userAccess(u),
+    plan: u.plan || 'free',
+    trialEndsAt: u.trialEndsAt || null,
+    planExpiresAt: u.planExpiresAt || null,
+    price: Number(s.monthlyPrice) || 99,
+    upi: { id: s.upiId || '', name: s.upiName || 'StaySathi' },
+    pendingRequest: openSubRequest(u.id) || null,
+    history: db.subscriptionPayments.filter(p => p.userId === u.id).slice(0, 24)
+  });
+});
+
+// owner: "I've paid ₹99 — please activate". One open request at a time.
+app.post('/api/billing/request', authActive, (req, res) => {
+  const u = req.user;
+  if (u.role === 'admin') return res.status(400).json({ error: 'Admins do not need a subscription' });
+  if (openSubRequest(u.id)) return res.status(409).json({ error: 'Your previous request is still being verified. We usually confirm within a few hours.' });
+  const months = Math.min(Math.max(Number(req.body?.months) || 1, 1), 12);
+  const request = {
+    id: store.id('sreq'),
+    userId: u.id, userName: u.name, phone: u.phone,
+    months,
+    amount: (Number(db.settings.monthlyPrice) || 99) * months,
+    txnRef: String(req.body?.txnRef || '').slice(0, 80),
+    note: String(req.body?.note || '').slice(0, 200),
+    status: 'open',
+    createdAt: new Date().toISOString()
+  };
+  db.subscriptionRequests.unshift(request);
+  if (db.subscriptionRequests.length > 500) db.subscriptionRequests.length = 500;
+  for (const admin of db.users.filter(x => x.role === 'admin')) {
+    notify(admin.id, null, 'subscription', '💳',
+      `${u.name} (${u.phone}) paid ₹${request.amount} for ${months} month${months > 1 ? 's' : ''}${request.txnRef ? ` · Ref: ${request.txnRef}` : ''} — activate from Admin → Subscriptions`);
+  }
+  logActivity(u.id, null, '💳', `Subscription payment submitted (₹${request.amount}) — waiting for confirmation`);
+  store.saveNow();
+  res.json({ request });
+});
+
+// owner cancels their own pending request (sent by mistake)
+app.delete('/api/billing/request', authActive, (req, res) => {
+  const r = openSubRequest(req.user.id);
+  if (!r) return res.status(404).json({ error: 'No pending request' });
+  r.status = 'cancelled';
+  r.resolvedAt = new Date().toISOString();
+  store.saveNow();
+  res.json({ ok: true });
+});
+
+/* ---------------- full data backup (owner) ---------------- */
+// One-tap JSON backup of everything the owner owns — peace of mind, and an
+// exit hatch. GET so it also works in read-only mode.
+app.get('/api/export', authAny, (req, res) => {
+  const u = req.user;
+  const props = db.properties.filter(p => p.ownerId === u.id).map(({ pinHash, ...p }) => p);
+  const ids = new Set(props.map(p => p.id));
+  const scoped = (key) => (db[key] || []).filter(x => ids.has(x.propertyId));
+  res.json({
+    exportedAt: new Date().toISOString(),
+    app: 'StaySathi',
+    owner: { name: u.name, phone: u.phone, email: u.email || '' },
+    properties: props,
+    floors: scoped('floors'),
+    rooms: scoped('rooms'),
+    beds: scoped('beds'),
+    tenants: scoped('tenants').map(({ portalToken, kycDocs, ...t }) => ({ ...t, kycDocs: (kycDocs || []).map(({ image, ...d }) => d) })),
+    payments: scoped('payments'),
+    expenses: scoped('expenses'),
+    complaints: scoped('complaints'),
+    staff: scoped('staff'),
+    salaryPayments: scoped('salaryPayments'),
+    meters: scoped('meters'),
+    notices: db.notices.filter(n => n.ownerId === u.id)
+  });
 });
 
 /* ---------------- KYC ---------------- */
@@ -1478,7 +1618,7 @@ function adminUserRow(u) {
 app.get('/api/admin/users', adminOnly, (req, res) => {
   res.json({
     users: db.users.filter(u => u.role !== 'admin').map(adminUserRow),
-    settings: db.settings || { autoApprove: true, trialDays: 30 }
+    settings: db.settings || { autoApprove: true, trialDays: 7, monthlyPrice: 99 }
   });
 });
 
@@ -1522,6 +1662,7 @@ app.delete('/api/admin/users/:id', adminOnly, (req, res) => {
   db.notices = db.notices.filter(n => n.ownerId !== u.id);
   db.activities = db.activities.filter(a => a.ownerId !== u.id);
   db.notifications = db.notifications.filter(n => n.ownerId !== u.id);
+  db.subscriptionRequests = db.subscriptionRequests.filter(r => r.userId !== u.id);
   store.saveNow();
   res.json({ ok: true });
 });
@@ -1530,6 +1671,7 @@ app.get('/api/admin/stats', adminOnly, (req, res) => {
   const owners = db.users.filter(u => u.role !== 'admin');
   const now = new Date();
   const signups = [];
+  const revenueSeries = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const mk = monthKey(d);
@@ -1537,27 +1679,103 @@ app.get('/api/admin/stats', adminOnly, (req, res) => {
       month: mk, label: d.toLocaleString('en', { month: 'short' }),
       count: owners.filter(u => (u.createdAt || '').startsWith(mk)).length
     });
+    revenueSeries.push({
+      month: mk, label: d.toLocaleString('en', { month: 'short' }),
+      amount: db.subscriptionPayments.filter(p => (p.createdAt || '').startsWith(mk))
+        .reduce((a, p) => a + (Number(p.amount) || 0), 0)
+    });
   }
+  const premiumActive = owners.filter(u => u.plan === 'premium' && (!u.planExpiresAt || new Date(u.planExpiresAt) > now));
+  const onTrial = owners.filter(u => u.plan !== 'premium' && u.trialEndsAt && new Date(u.trialEndsAt) > now);
+  const soon = new Date(now.getTime() + 7 * 86400000);
   res.json({
     totals: {
       users: owners.length,
       active: owners.filter(u => (u.status || 'active') === 'active').length,
       pending: owners.filter(u => u.status === 'pending').length,
       blocked: owners.filter(u => u.status === 'blocked' || u.status === 'rejected').length,
-      premium: owners.filter(u => u.plan === 'premium').length,
+      premium: premiumActive.length,
+      trial: onTrial.length,
+      readonly: owners.filter(u => isReadonly(u)).length,
+      openRequests: db.subscriptionRequests.filter(r => r.status === 'open').length,
+      expiringSoon: premiumActive.filter(u => u.planExpiresAt && new Date(u.planExpiresAt) <= soon).length,
+      revenueThisMonth: revenueSeries[revenueSeries.length - 1]?.amount || 0,
+      revenueTotal: db.subscriptionPayments.reduce((a, p) => a + (Number(p.amount) || 0), 0),
       properties: db.properties.length,
       beds: db.beds.length,
       tenants: db.tenants.filter(t => t.status === 'active').length,
       paymentsRecorded: db.payments.length
     },
-    signups
+    signups,
+    revenueSeries
   });
 });
 
+/* ---- admin: subscription control centre ---- */
+
+// pending "I have paid" requests + revenue ledger + who expires next
+app.get('/api/admin/subscriptions', adminOnly, (req, res) => {
+  const now = new Date();
+  const soon = new Date(now.getTime() + 7 * 86400000);
+  const expiring = db.users
+    .filter(u => u.role !== 'admin' && u.plan === 'premium' && u.planExpiresAt)
+    .map(u => ({ id: u.id, name: u.name, phone: u.phone, planExpiresAt: u.planExpiresAt }))
+    .filter(u => new Date(u.planExpiresAt) <= soon)
+    .sort((a, b) => a.planExpiresAt.localeCompare(b.planExpiresAt));
+  res.json({
+    requests: db.subscriptionRequests.slice(0, 100),
+    payments: db.subscriptionPayments.slice(0, 200),
+    expiring
+  });
+});
+
+// approve / reject an owner's payment request
+app.post('/api/admin/subscriptions/:id/resolve', adminOnly, (req, res) => {
+  const r = db.subscriptionRequests.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ error: 'Request not found' });
+  if (r.status !== 'open') return res.status(400).json({ error: 'Request already resolved' });
+  const user = db.users.find(u => u.id === r.userId);
+  if (req.body?.accept) {
+    if (!user) return res.status(404).json({ error: 'User no longer exists' });
+    const record = activateSubscription(user, req.body?.months || r.months, 'upi', r.txnRef, r.id);
+    r.status = 'approved';
+    r.resolvedAt = new Date().toISOString();
+    store.saveNow();
+    return res.json({ request: r, payment: record, user: adminUserRow(user) });
+  }
+  r.status = 'rejected';
+  r.resolvedAt = new Date().toISOString();
+  if (user) notify(user.id, null, 'subscription', '❌', 'We could not verify your subscription payment. Please contact support or try again.');
+  store.saveNow();
+  res.json({ request: r });
+});
+
+// direct switch: turn a user's subscription on (n months) or off
+app.post('/api/admin/users/:id/subscription', adminOnly, (req, res) => {
+  const u = db.users.find(x => x.id === req.params.id && x.role !== 'admin');
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  if (req.body?.action === 'activate') {
+    const record = activateSubscription(u, req.body?.months || 1, 'admin');
+    store.saveNow();
+    return res.json({ user: adminUserRow(u), payment: record });
+  }
+  if (req.body?.action === 'deactivate') {
+    u.plan = 'free';
+    u.planExpiresAt = null;
+    notify(u.id, null, 'account', 'ℹ️', 'Your subscription was turned off by the admin.');
+    store.saveNow();
+    return res.json({ user: adminUserRow(u) });
+  }
+  res.status(400).json({ error: 'Unknown action' });
+});
+
 app.put('/api/admin/settings', adminOnly, (req, res) => {
-  db.settings = db.settings || { autoApprove: true, trialDays: 30 };
+  db.settings = db.settings || {};
   if (req.body?.autoApprove !== undefined) db.settings.autoApprove = !!req.body.autoApprove;
-  if (req.body?.trialDays !== undefined) db.settings.trialDays = Math.max(1, Number(req.body.trialDays) || 30);
+  if (req.body?.trialDays !== undefined) db.settings.trialDays = Math.max(1, Number(req.body.trialDays) || 7);
+  if (req.body?.monthlyPrice !== undefined) db.settings.monthlyPrice = Math.max(1, Number(req.body.monthlyPrice) || 99);
+  if (req.body?.upiId !== undefined) db.settings.upiId = String(req.body.upiId || '').trim().slice(0, 60);
+  if (req.body?.upiName !== undefined) db.settings.upiName = String(req.body.upiName || '').trim().slice(0, 60);
   store.saveNow();
   res.json({ settings: db.settings });
 });

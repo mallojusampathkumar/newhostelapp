@@ -9,6 +9,7 @@ import Alerts from './Alerts.jsx';
 import More from './More.jsx';
 import Admin from './Admin.jsx';
 import SearchOverlay from '../components/SearchOverlay.jsx';
+import SubscriptionSheet from '../components/Subscription.jsx';
 
 export default function Shell({ user, setUser, onLogout }) {
   const { t } = useLang();
@@ -18,6 +19,7 @@ export default function Shell({ user, setUser, onLogout }) {
   const [seg, setSeg] = useState(null); // optional sub-section hint when jumping tabs
   const [overview, setOverview] = useState(null);
   const [search, setSearch] = useState(false);
+  const [subOpen, setSubOpen] = useState(false);
 
   const refresh = useCallback(() => {
     get('/overview').then(setOverview).catch(() => {});
@@ -49,6 +51,8 @@ export default function Shell({ user, setUser, onLogout }) {
   const dueCount = overview?.totals?.dueTenants || 0;
   const alertCount = (overview?.totals?.openComplaints || 0) + (overview?.unreadNotifications || 0);
   const readonly = user.access?.readonly;
+  // trial countdown pill — visible until the owner subscribes
+  const onTrial = !isAdmin && !readonly && user.access?.plan !== 'premium' && user.access?.daysLeft != null;
 
   const tabs = [
     ['home', '🫧', t('navHome')],
@@ -69,6 +73,11 @@ export default function Shell({ user, setUser, onLogout }) {
           <kbd>{navigator.platform?.includes('Mac') ? '⌘ K' : 'Ctrl K'}</kbd>
         </button>
         <div className="row" style={{ gap: 8 }}>
+          {onTrial && (
+            <button className="chip trial-pill" title={t('mySubscription')} onClick={() => setSubOpen(true)}>
+              ⏳ {Math.max(0, user.access.daysLeft)}d
+            </button>
+          )}
           <button className="icon-btn search-tap" title={t('searchEverything')} onClick={() => setSearch(true)}>🔍</button>
           <button className="icon-btn" title={t('themeTitle')} onClick={flipTheme}>{isDark ? '☀️' : '🌙'}</button>
           <button className="chip" onClick={() => go('more')}>🙍 {user.name.split(' ')[0]}</button>
@@ -76,7 +85,10 @@ export default function Shell({ user, setUser, onLogout }) {
       </header>
 
       {readonly && (
-        <div className="readonly-banner">🔒 {t('readonlyBanner')}</div>
+        <div className="readonly-banner">
+          <span>🔒 {t('readonlyBanner')}</span>
+          <button className="btn btn-sm btn-primary" onClick={() => setSubOpen(true)}>⭐ {t('upgradeNow')}</button>
+        </div>
       )}
 
       {tab === 'home' && <BubbleHome overview={overview} refreshOverview={refresh} go={go} user={user} />}
@@ -84,7 +96,7 @@ export default function Shell({ user, setUser, onLogout }) {
       {tab === 'people' && <People overview={overview} refreshOverview={refresh} initialSeg={seg} />}
       {tab === 'alerts' && <Alerts overview={overview} refreshOverview={refresh} initialSeg={seg} />}
       {tab === 'admin' && isAdmin && <Admin />}
-      {tab === 'more' && <More overview={overview} user={user} setUser={setUser} onLogout={onLogout} refreshOverview={refresh} />}
+      {tab === 'more' && <More overview={overview} user={user} setUser={setUser} onLogout={onLogout} refreshOverview={refresh} openSubscription={() => setSubOpen(true)} />}
 
       <nav className="bottom-nav">
         <div className="nav-brand" aria-hidden="true"><span className="orb">🏠</span>{t('appName')}</div>
@@ -105,6 +117,10 @@ export default function Shell({ user, setUser, onLogout }) {
           refreshOverview={refresh}
           onClose={() => setSearch(false)}
         />
+      )}
+
+      {subOpen && !isAdmin && (
+        <SubscriptionSheet user={user} onClose={() => setSubOpen(false)} />
       )}
     </div>
   );

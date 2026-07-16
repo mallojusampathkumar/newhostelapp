@@ -5,7 +5,7 @@ import { useTheme, THEMES } from '../theme.jsx';
 import { Modal, Field, Empty, rupee } from '../components/ui.jsx';
 import { useToast } from '../App.jsx';
 
-export default function More({ overview, user, setUser, onLogout }) {
+export default function More({ overview, user, setUser, onLogout, openSubscription }) {
   const { t, lang, setLang } = useLang();
   const toast = useToast();
   const [screen, setScreen] = useState('menu'); // menu | meters | tutorials
@@ -38,6 +38,27 @@ export default function More({ overview, user, setUser, onLogout }) {
     setLang(code);
     try { const { user: u } = await put('/me', { language: code }); setUser(u); } catch { /* offline ok */ }
   };
+
+  // one-tap full data backup (JSON) — works even in read-only mode
+  const downloadBackup = async () => {
+    try {
+      const data = await get('/export');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      a.download = `staysathi-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast(t('backupDone'));
+    } catch (e) { toast(e.message, 'err'); }
+  };
+
+  const isAdmin = user.role === 'admin';
+  const access = user.access || {};
+  const planChip = access.readonly
+    ? ['red', `🔒 ${t('subExpiredTitle')}`]
+    : user.plan === 'premium'
+      ? ['green', `⭐ ${t('premiumPlan')}`]
+      : ['orange', `⏳ ${t('subTrialTitle')} · ${Math.max(0, access.daysLeft ?? 0)}d`];
 
   if (screen === 'tutorials') return <Tutorials onBack={() => setScreen('menu')} />;
 
@@ -87,12 +108,22 @@ export default function More({ overview, user, setUser, onLogout }) {
             <b className="big">{user.name}</b>
             <div className="muted small">📱 {user.phone} · {t(user.businessType)}</div>
           </div>
-          <span className="chip active">⭐ {user.plan === 'premium' ? t('premiumPlan') : t('freePlan')}</span>
+          <span className={`chip ${planChip[0]}`}>{planChip[1]}</span>
         </div>
         <button className="btn btn-sm btn-block mt16" onClick={() => setModal('editProfile')}>✏️ {t('editProfile')}</button>
       </div>
 
       <div className="mt16">
+        {!isAdmin && (
+          <button className="list-item btn-block" style={{ width: '100%' }} onClick={openSubscription}>
+            <div className="avatar" style={{ background: 'linear-gradient(135deg,#6c5ce7,#a29bfe)' }}>💳</div>
+            <div className="grow" style={{ textAlign: 'left' }}>
+              <b>{t('mySubscription')}</b>
+              <div className="muted small">{t('subManage')}</div>
+            </div>
+            <span>›</span>
+          </button>
+        )}
         <button className="list-item btn-block" style={{ width: '100%' }} onClick={() => setScreen('tutorials')}>
           <div className="avatar" style={{ background: 'linear-gradient(135deg,#e84393,#fd79a8)' }}>🎬</div>
           <b className="grow" style={{ textAlign: 'left' }}>{t('tutorials')}</b><span>›</span>
@@ -100,6 +131,14 @@ export default function More({ overview, user, setUser, onLogout }) {
         <button className="list-item btn-block" style={{ width: '100%' }} onClick={() => setScreen('meters')}>
           <div className="avatar" style={{ background: 'linear-gradient(135deg,#f39c12,#fdaa3d)' }}>⚡</div>
           <b className="grow" style={{ textAlign: 'left' }}>{t('meters')}</b><span>›</span>
+        </button>
+        <button className="list-item btn-block" style={{ width: '100%' }} onClick={downloadBackup}>
+          <div className="avatar" style={{ background: 'linear-gradient(135deg,#00b894,#55efc4)' }}>🗄️</div>
+          <div className="grow" style={{ textAlign: 'left' }}>
+            <b>{t('downloadBackup')}</b>
+            <div className="muted small">{t('backupHint')}</div>
+          </div>
+          <span>›</span>
         </button>
         {canInstall && (
           <button className="list-item btn-block" style={{ width: '100%' }} onClick={installApp}>
@@ -162,7 +201,7 @@ function ThemePickerCard() {
 function EditProfileModal({ user, setUser, onClose }) {
   const { t } = useLang();
   const toast = useToast();
-  const [f, setF] = useState({ name: user.name, email: user.email || '', businessType: user.businessType || 'hostel' });
+  const [f, setF] = useState({ name: user.name, email: user.email || '', businessType: user.businessType || 'hostel', upiId: user.upiId || '' });
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
     e.preventDefault(); setBusy(true);
@@ -181,6 +220,9 @@ function EditProfileModal({ user, setUser, onClose }) {
         </Field>
         <Field label={`✉️ ${t('email')}`}>
           <input className="input" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} />
+        </Field>
+        <Field label={`📲 ${t('upiIdLabel')}`}>
+          <input className="input" placeholder="yourname@upi" value={f.upiId} onChange={e => setF({ ...f, upiId: e.target.value })} />
         </Field>
         <Field label={`🏠 ${t('businessType')}`}>
           <div className="type-grid">
